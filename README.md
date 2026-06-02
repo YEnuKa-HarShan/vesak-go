@@ -1,3 +1,7 @@
+<<<<<<< HEAD
+=======
+
+>>>>>>> 30ae20592e494edc93471a1e9e1890b8c9920cdd
 ```bash
 -- Create users table
 CREATE TABLE users (
