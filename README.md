@@ -1,4 +1,3 @@
-yenukaharshan1234@gmail.com - Supabase Database
 ```bash
 -- Create users table
 CREATE TABLE users (
