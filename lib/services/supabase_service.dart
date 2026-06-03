@@ -349,7 +349,6 @@ class SupabaseService {
           final longitude = (json['longitude'] as num?)?.toDouble();
 
           if (latitude == null || longitude == null) {
-            print('Skipping event ${json['id']} - missing coordinates');
             continue;
           }
 

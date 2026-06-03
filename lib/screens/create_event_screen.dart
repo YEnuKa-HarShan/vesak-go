@@ -4,15 +4,21 @@ import 'package:geolocator/geolocator.dart';
 import '../services/supabase_service.dart';
 import '../services/location_service.dart';
 import '../services/session_service.dart';
+import '../models/event_model.dart';
 import '../constants.dart';
 import '../theme/app_theme.dart';
 
 class CreateEventScreen extends StatefulWidget {
   final String userId;
   final String userFirstName;
+  final EventModel? editEvent;
 
-  const CreateEventScreen(
-      {super.key, required this.userId, required this.userFirstName});
+  const CreateEventScreen({
+    super.key,
+    required this.userId,
+    required this.userFirstName,
+    this.editEvent,
+  });
 
   @override
   State<CreateEventScreen> createState() => _CreateEventScreenState();
@@ -34,11 +40,47 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
 
   bool _isLoading = false;
   bool _isGettingLocation = false;
+  bool _isEditMode = false;
 
   @override
   void initState() {
     super.initState();
-    _getCurrentLocation();
+    _isEditMode = widget.editEvent != null;
+
+    if (_isEditMode) {
+      _loadEventData();
+    } else {
+      _getCurrentLocation();
+    }
+  }
+
+  void _loadEventData() {
+    final event = widget.editEvent!;
+    _selectedCategory = event.category;
+    _selectedFoodType = event.foodType != 'none' ? event.foodType : null;
+    _titleController.text = event.title;
+    _descriptionController.text = event.description ?? '';
+    _locationController.text = event.location;
+
+    try {
+      _selectedDate = DateTime.parse(event.date);
+    } catch (e) {
+      _selectedDate = null;
+    }
+
+    try {
+      final timeStr = event.time.toLowerCase();
+      bool isPM = timeStr.contains('pm');
+      final timeParts =
+          timeStr.replaceAll(RegExp(r'[apm]'), '').trim().split(':');
+      int hour = int.parse(timeParts[0]);
+      final minute = int.parse(timeParts[1]);
+      if (isPM && hour != 12) hour += 12;
+      if (!isPM && hour == 12) hour = 0;
+      _selectedTime = TimeOfDay(hour: hour, minute: minute);
+    } catch (e) {
+      _selectedTime = null;
+    }
   }
 
   Future<void> _getCurrentLocation() async {
@@ -57,7 +99,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   Future<void> _selectDate() async {
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
+      initialDate: _selectedDate ?? DateTime.now(),
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 365)),
       builder: (context, child) {
@@ -83,7 +125,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   Future<void> _selectTime() async {
     final TimeOfDay? picked = await showTimePicker(
       context: context,
-      initialTime: TimeOfDay.now(),
+      initialTime: _selectedTime ?? TimeOfDay.now(),
       builder: (context, child) {
         return Theme(
           data: ThemeData.light().copyWith(
@@ -102,7 +144,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
     }
   }
 
-  Future<void> _handleCreateEvent() async {
+  Future<void> _handleSubmit() async {
     if (_selectedCategory == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select a category')),
@@ -175,26 +217,47 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
     final dateString = DateFormat('yyyy-MM-dd').format(_selectedDate!);
     final timeString = _selectedTime!.format(context);
 
-    final success = await _supabaseService.createEvent(
-      category: _selectedCategory!,
-      title: _titleController.text,
-      description: _descriptionController.text.isEmpty
-          ? null
-          : _descriptionController.text,
-      date: dateString,
-      time: timeString,
-      location: _locationController.text,
-      userId: widget.userId,
-      createdBy: widget.userFirstName,
-      latitude: latitude,
-      longitude: longitude,
-      foodType: _selectedCategory == 'දන්සල' ? _selectedFoodType! : 'none',
-    );
+    bool success;
+
+    if (_isEditMode) {
+      success = await _supabaseService.updateEvent(
+        eventId: widget.editEvent!.id,
+        category: _selectedCategory!,
+        title: _titleController.text,
+        description: _descriptionController.text.isEmpty
+            ? ''
+            : _descriptionController.text,
+        date: dateString,
+        time: timeString,
+        location: _locationController.text,
+        latitude: latitude,
+        longitude: longitude,
+        foodType: _selectedCategory == 'දන්සල' ? _selectedFoodType! : 'none',
+      );
+    } else {
+      success = await _supabaseService.createEvent(
+        category: _selectedCategory!,
+        title: _titleController.text,
+        description: _descriptionController.text.isEmpty
+            ? null
+            : _descriptionController.text,
+        date: dateString,
+        time: timeString,
+        location: _locationController.text,
+        userId: widget.userId,
+        createdBy: widget.userFirstName,
+        latitude: latitude,
+        longitude: longitude,
+        foodType: _selectedCategory == 'දන්සල' ? _selectedFoodType! : 'none',
+      );
+    }
 
     if (success) {
-      final updatedUser = await _supabaseService.getUserById(widget.userId);
-      if (updatedUser != null) {
-        await _sessionService.login(updatedUser);
+      if (!_isEditMode) {
+        final updatedUser = await _supabaseService.getUserById(widget.userId);
+        if (updatedUser != null) {
+          await _sessionService.login(updatedUser);
+        }
       }
 
       setState(() {
@@ -202,7 +265,10 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Event created successfully! +50 XP')),
+        SnackBar(
+            content: Text(_isEditMode
+                ? 'Event updated successfully!'
+                : 'Event created successfully! +50 XP')),
       );
       Navigator.pop(context, true);
     } else {
@@ -210,7 +276,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
         _isLoading = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to create event')),
+        const SnackBar(content: Text('Failed to save event')),
       );
     }
   }
@@ -220,8 +286,10 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
     return Scaffold(
       backgroundColor: AppTheme.sand,
       appBar: AppBar(
-        title:
-            const Text('Create Event', style: TextStyle(color: AppTheme.white)),
+        title: Text(
+          _isEditMode ? 'Edit Event' : 'Create Event',
+          style: const TextStyle(color: AppTheme.white),
+        ),
         backgroundColor: AppTheme.navy,
         elevation: 0,
         leading: IconButton(
@@ -243,16 +311,16 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
-                  Icons.event_available,
+                  _isEditMode ? Icons.edit : Icons.event_available,
                   size: 60,
                   color: AppTheme.gold,
                 ),
               ),
             ),
             const SizedBox(height: 30),
-            const Text(
-              'Create New Event',
-              style: TextStyle(
+            Text(
+              _isEditMode ? 'Edit Event Details' : 'Create New Event',
+              style: const TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
                 color: AppTheme.charcoal,
@@ -260,15 +328,15 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Share your Vesak celebration with the community',
+              _isEditMode
+                  ? 'Update your event information'
+                  : 'Share your Vesak celebration with the community',
               style: TextStyle(
                 fontSize: 14,
                 color: AppTheme.charcoal.withOpacity(0.6),
               ),
             ),
             const SizedBox(height: 30),
-
-            // Category
             DropdownButtonFormField<String>(
               value: _selectedCategory,
               decoration: InputDecoration(
@@ -311,8 +379,6 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
               icon: const Icon(Icons.arrow_drop_down, color: AppTheme.charcoal),
             ),
             const SizedBox(height: 20),
-
-            // Food Type (conditional)
             if (_selectedCategory == 'දන්සල')
               Column(
                 children: [
@@ -358,8 +424,6 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                   const SizedBox(height: 20),
                 ],
               ),
-
-            // Title
             TextField(
               controller: _titleController,
               decoration: InputDecoration(
@@ -378,8 +442,6 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
               style: const TextStyle(color: AppTheme.charcoal),
             ),
             const SizedBox(height: 20),
-
-            // Description
             TextField(
               controller: _descriptionController,
               maxLines: 3,
@@ -399,8 +461,6 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
               style: const TextStyle(color: AppTheme.charcoal),
             ),
             const SizedBox(height: 20),
-
-            // Date Picker
             GestureDetector(
               onTap: _selectDate,
               child: AbsorbPointer(
@@ -430,8 +490,6 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
               ),
             ),
             const SizedBox(height: 20),
-
-            // Time Picker
             GestureDetector(
               onTap: _selectTime,
               child: AbsorbPointer(
@@ -461,8 +519,6 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
               ),
             ),
             const SizedBox(height: 20),
-
-            // Location with auto-fill
             TextField(
               controller: _locationController,
               decoration: InputDecoration(
@@ -494,8 +550,6 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
               style: const TextStyle(color: AppTheme.charcoal),
             ),
             const SizedBox(height: 20),
-
-            // Contact Info (New Field)
             TextField(
               controller: _contactController,
               decoration: InputDecoration(
@@ -516,8 +570,6 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
               keyboardType: TextInputType.phone,
             ),
             const SizedBox(height: 30),
-
-            // Preview Card
             if (_selectedCategory != null &&
                 _titleController.text.isNotEmpty &&
                 _selectedDate != null &&
@@ -589,19 +641,17 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                   ],
                 ),
               ),
-
-            // Create Button
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _isLoading ? null : _handleCreateEvent,
+                onPressed: _isLoading ? null : _handleSubmit,
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
                 child: _isLoading
                     ? const CircularProgressIndicator(color: AppTheme.white)
-                    : const Text('Create Event',
-                        style: TextStyle(fontSize: 16)),
+                    : Text(_isEditMode ? 'Update Event' : 'Create Event',
+                        style: const TextStyle(fontSize: 16)),
               ),
             ),
           ],

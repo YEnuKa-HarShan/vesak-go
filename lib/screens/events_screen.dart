@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:table_calendar/table_calendar.dart';
 import '../services/supabase_service.dart';
 import '../services/session_service.dart';
@@ -7,6 +8,7 @@ import '../models/event_model.dart';
 import '../constants.dart';
 import '../theme/app_theme.dart';
 import 'event_details_screen.dart';
+import 'create_event_screen.dart';
 
 class EventsScreen extends StatefulWidget {
   final int initialTab;
@@ -249,6 +251,78 @@ class _EventsScreenState extends State<EventsScreen>
   List<EventModel> _getEventsForDay(DateTime day) {
     final key = DateTime(day.year, day.month, day.day);
     return _eventsMap[key] ?? [];
+  }
+
+  Future<void> _editEvent(EventModel event) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CreateEventScreen(
+          userId: _sessionService.currentUser!.id,
+          userFirstName: _sessionService.currentUser!.firstName,
+          editEvent: event,
+        ),
+      ),
+    );
+
+    if (result == true) {
+      _loadEvents();
+      if (_tabController.index == 2) {
+        _loadBookmarkedEvents();
+      }
+    }
+  }
+
+  Future<void> _deleteEvent(String eventId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Event',
+            style: TextStyle(color: AppTheme.charcoal)),
+        content: const Text('Are you sure you want to delete this event?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel',
+                style: TextStyle(color: AppTheme.charcoal)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child:
+                const Text('Delete', style: TextStyle(color: AppTheme.maroon)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      final success = await _supabaseService.deleteEvent(eventId);
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Event deleted successfully')),
+        );
+        _loadEvents();
+        if (_tabController.index == 2) {
+          _loadBookmarkedEvents();
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to delete event')),
+        );
+      }
+    }
+  }
+
+  void _shareEvent(EventModel event) {
+    Share.share(
+      '🎉 ${event.title}\n\n'
+      '📅 Date: ${event.date}\n'
+      '⏰ Time: ${event.time}\n'
+      '📍 Location: ${event.location}\n'
+      '📂 Category: ${event.category}\n\n'
+      'Check out this event on VesakGO!',
+      subject: 'VesakGO Event: ${event.title}',
+    );
   }
 
   @override
@@ -532,7 +606,9 @@ class _EventsScreenState extends State<EventsScreen>
         itemCount: events.length,
         itemBuilder: (context, index) {
           final event = events[index];
-          return _buildEventCard(event);
+          final isOwner = _sessionService.isLoggedIn &&
+              event.userId == _sessionService.currentUser?.id;
+          return _buildEventCard(event, isOwner: isOwner);
         },
       ),
     );
@@ -609,13 +685,15 @@ class _EventsScreenState extends State<EventsScreen>
         itemCount: _bookmarkedEvents.length,
         itemBuilder: (context, index) {
           final event = _bookmarkedEvents[index];
-          return _buildEventCard(event);
+          final isOwner = _sessionService.isLoggedIn &&
+              event.userId == _sessionService.currentUser?.id;
+          return _buildEventCard(event, isOwner: isOwner);
         },
       ),
     );
   }
 
-  Widget _buildEventCard(EventModel event) {
+  Widget _buildEventCard(EventModel event, {required bool isOwner}) {
     final categoryColor = AppConstants.getCategoryColor(event.category);
     final displayIcon = event.getMarkerIcon();
     final displayName = event.getCategoryDisplayName();
@@ -785,6 +863,54 @@ class _EventsScreenState extends State<EventsScreen>
                       ],
                     ),
                   ),
+                  if (isOwner)
+                    PopupMenuButton<String>(
+                      icon: Icon(Icons.more_vert, color: AppTheme.charcoal),
+                      onSelected: (value) async {
+                        if (value == 'edit') {
+                          await _editEvent(event);
+                        } else if (value == 'delete') {
+                          await _deleteEvent(event.id);
+                        } else if (value == 'share') {
+                          _shareEvent(event);
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: 'edit',
+                          child: Row(
+                            children: [
+                              Icon(Icons.edit,
+                                  size: 20, color: AppTheme.saffron),
+                              SizedBox(width: 8),
+                              Text('Edit'),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'share',
+                          child: Row(
+                            children: [
+                              Icon(Icons.share, size: 20, color: AppTheme.navy),
+                              SizedBox(width: 8),
+                              Text('Share'),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              Icon(Icons.delete,
+                                  size: 20, color: AppTheme.maroon),
+                              SizedBox(width: 8),
+                              Text('Delete',
+                                  style: TextStyle(color: AppTheme.maroon)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                 ],
               ),
             ),
