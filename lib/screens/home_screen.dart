@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import 'login_screen.dart';
-import 'create_event_screen.dart';
-import 'events_screen.dart';
-import 'profile_screen.dart';
-import 'map_screen.dart';
 import '../services/supabase_service.dart';
 import '../services/session_service.dart';
 import '../constants.dart';
 import '../models/event_model.dart';
 import '../theme/app_theme.dart';
+import '../widgets/event_card.dart';
+import 'login_screen.dart';
+import 'create_event_screen.dart';
+import 'events_screen.dart';
+import 'profile_screen.dart';
+import 'map_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -814,208 +814,12 @@ class _HomeScreenState extends State<HomeScreen> {
         itemCount: _upcomingEvents.length,
         itemBuilder: (context, index) {
           final event = _upcomingEvents[index];
-          final categoryColor = AppConstants.getCategoryColor(event.category);
-          final icon = event.getMarkerIcon();
-
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppTheme.charcoal.withOpacity(0.1),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(20),
-                child: Stack(
-                  children: [
-                    // Background Image or Gradient
-                    if (event.hasImage)
-                      CachedNetworkImage(
-                        imageUrl: event.imageUrl,
-                        width: double.infinity,
-                        height: double.infinity,
-                        fit: BoxFit.cover,
-                        placeholder: (context, url) => Container(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                categoryColor,
-                                categoryColor.withOpacity(0.7)
-                              ],
-                            ),
-                          ),
-                        ),
-                        errorWidget: (context, url, error) => Container(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                categoryColor,
-                                categoryColor.withOpacity(0.7)
-                              ],
-                            ),
-                          ),
-                        ),
-                      )
-                    else
-                      Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              categoryColor,
-                              categoryColor.withOpacity(0.7)
-                            ],
-                          ),
-                        ),
-                      ),
-
-                    // Dark Overlay for better text visibility
-                    Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.transparent,
-                            Colors.black.withOpacity(0.7),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    // Content
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          // Category Chip
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  icon,
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  event.category,
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    color: AppTheme.white,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          // Title
-                          Text(
-                            event.title,
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.white,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 8),
-                          // Date and Time
-                          Row(
-                            children: [
-                              const Icon(Icons.calendar_today,
-                                  size: 14, color: AppTheme.white),
-                              const SizedBox(width: 6),
-                              Text(
-                                event.date,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppTheme.white.withOpacity(0.9),
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              const Icon(Icons.access_time,
-                                  size: 14, color: AppTheme.white),
-                              const SizedBox(width: 6),
-                              Text(
-                                event.time,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppTheme.white.withOpacity(0.9),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          // Location
-                          Row(
-                            children: [
-                              const Icon(Icons.location_on,
-                                  size: 14, color: AppTheme.white),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  event.location,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: AppTheme.white.withOpacity(0.8),
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          // View Details Button
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: AppTheme.gold,
-                              borderRadius: BorderRadius.circular(25),
-                            ),
-                            child: GestureDetector(
-                              onTap: () {
-                                _showEventDetails(event);
-                              },
-                              child: const Text(
-                                'View Details',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppTheme.charcoal,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            child: EventCard(
+              event: event,
+              height: 220,
+              onTap: () => _showEventDetails(event),
             ),
           );
         },

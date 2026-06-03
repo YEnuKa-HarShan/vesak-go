@@ -2,14 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:table_calendar/table_calendar.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../services/supabase_service.dart';
 import '../services/session_service.dart';
 import '../models/event_model.dart';
 import '../constants.dart';
 import '../theme/app_theme.dart';
-import 'event_details_screen.dart';
+import '../widgets/event_card.dart';
 import 'create_event_screen.dart';
+// Import EventDetailsScreen at the top (add this import)
+import 'event_details_screen.dart';
 
 class EventsScreen extends StatefulWidget {
   final int initialTab;
@@ -609,7 +610,26 @@ class _EventsScreenState extends State<EventsScreen>
           final event = events[index];
           final isOwner = _sessionService.isLoggedIn &&
               event.userId == _sessionService.currentUser?.id;
-          return _buildEventCard(event, isOwner: isOwner);
+          return EventCard(
+            event: event,
+            showActions: isOwner,
+            height: 200,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => EventDetailsScreen(event: event),
+                ),
+              ).then((_) {
+                if (_tabController.index == 2) {
+                  _loadBookmarkedEvents();
+                }
+              });
+            },
+            onEdit: () => _editEvent(event),
+            onDelete: () => _deleteEvent(event.id),
+            onShare: () => _shareEvent(event),
+          );
         },
       ),
     );
@@ -688,395 +708,27 @@ class _EventsScreenState extends State<EventsScreen>
           final event = _bookmarkedEvents[index];
           final isOwner = _sessionService.isLoggedIn &&
               event.userId == _sessionService.currentUser?.id;
-          return _buildEventCard(event, isOwner: isOwner);
-        },
-      ),
-    );
-  }
-
-  Widget _buildEventCard(EventModel event, {required bool isOwner}) {
-    final categoryColor = AppConstants.getCategoryColor(event.category);
-    final displayIcon = event.getMarkerIcon();
-    final displayName = event.getCategoryDisplayName();
-
-    DateTime eventDate;
-    try {
-      eventDate = DateTime.parse(event.date);
-    } catch (e) {
-      eventDate = DateTime.now();
-    }
-    final day = DateFormat('dd').format(eventDate);
-    final month = DateFormat('MMM').format(eventDate);
-
-    bool isActive = false;
-    try {
-      final today = DateTime.now();
-      if (eventDate.year == today.year &&
-          eventDate.month == today.month &&
-          eventDate.day == today.day) {
-        final timeStr = event.time.toLowerCase();
-        bool isPM = timeStr.contains('pm');
-        final timeParts =
-            timeStr.replaceAll(RegExp(r'[apm]'), '').trim().split(':');
-        int hour = int.parse(timeParts[0]);
-        final minute = int.parse(timeParts[1]);
-        if (isPM && hour != 12) hour += 12;
-        if (!isPM && hour == 12) hour = 0;
-        final eventDateTime = DateTime(
-            eventDate.year, eventDate.month, eventDate.day, hour, minute);
-        isActive = eventDateTime.isAfter(DateTime.now());
-      }
-    } catch (e) {
-      isActive = false;
-    }
-
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => EventDetailsScreen(event: event),
-          ),
-        ).then((_) {
-          if (_tabController.index == 2) {
-            _loadBookmarkedEvents();
-          }
-        });
-      },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        decoration: BoxDecoration(
-          color: AppTheme.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: AppTheme.charcoal.withOpacity(0.08),
-              blurRadius: 10,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Image Header
-            Container(
-              height: 140,
-              decoration: BoxDecoration(
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(16),
-                  topRight: Radius.circular(16),
+          return EventCard(
+            event: event,
+            showActions: isOwner,
+            height: 200,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => EventDetailsScreen(event: event),
                 ),
-                image: event.hasImage
-                    ? DecorationImage(
-                        image: CachedNetworkImageProvider(event.imageUrl),
-                        fit: BoxFit.cover,
-                      )
-                    : null,
-              ),
-              child: event.hasImage
-                  ? Container(
-                      decoration: BoxDecoration(
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(16),
-                          topRight: Radius.circular(16),
-                        ),
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.transparent,
-                            Colors.black.withOpacity(0.5),
-                          ],
-                        ),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            Text(
-                              event.title,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.white,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.2),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        displayIcon,
-                                        style: const TextStyle(fontSize: 10),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        displayName,
-                                        style: const TextStyle(
-                                          fontSize: 10,
-                                          color: AppTheme.white,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                if (isActive)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color:
-                                          AppTheme.forestGreen.withOpacity(0.8),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: const Text(
-                                      'Active',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: AppTheme.white,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  : Container(
-                      decoration: BoxDecoration(
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(16),
-                          topRight: Radius.circular(16),
-                        ),
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            categoryColor,
-                            categoryColor.withOpacity(0.7)
-                          ],
-                        ),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              width: 50,
-                              height: 50,
-                              decoration: BoxDecoration(
-                                color: AppTheme.white,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    day,
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      color: categoryColor,
-                                    ),
-                                  ),
-                                  Text(
-                                    month,
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: categoryColor,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    event.title,
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppTheme.white,
-                                    ),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 8, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white.withOpacity(0.2),
-                                          borderRadius:
-                                              BorderRadius.circular(12),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Text(
-                                              displayIcon,
-                                              style:
-                                                  const TextStyle(fontSize: 10),
-                                            ),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              displayName,
-                                              style: const TextStyle(
-                                                fontSize: 10,
-                                                color: AppTheme.white,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      if (isActive)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 6, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: AppTheme.forestGreen
-                                                .withOpacity(0.8),
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                          ),
-                                          child: const Text(
-                                            'Active',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              color: AppTheme.white,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                            if (isOwner)
-                              PopupMenuButton<String>(
-                                icon: Icon(Icons.more_vert,
-                                    color: AppTheme.white),
-                                onSelected: (value) async {
-                                  if (value == 'edit') {
-                                    await _editEvent(event);
-                                  } else if (value == 'delete') {
-                                    await _deleteEvent(event.id);
-                                  } else if (value == 'share') {
-                                    _shareEvent(event);
-                                  }
-                                },
-                                itemBuilder: (context) => [
-                                  const PopupMenuItem(
-                                    value: 'edit',
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.edit,
-                                            size: 20, color: AppTheme.saffron),
-                                        SizedBox(width: 8),
-                                        Text('Edit'),
-                                      ],
-                                    ),
-                                  ),
-                                  const PopupMenuItem(
-                                    value: 'share',
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.share,
-                                            size: 20, color: AppTheme.navy),
-                                        SizedBox(width: 8),
-                                        Text('Share'),
-                                      ],
-                                    ),
-                                  ),
-                                  const PopupMenuItem(
-                                    value: 'delete',
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.delete,
-                                            size: 20, color: AppTheme.maroon),
-                                        SizedBox(width: 8),
-                                        Text('Delete',
-                                            style: TextStyle(
-                                                color: AppTheme.maroon)),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-            ),
-            // Info Section
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.access_time,
-                          size: 14, color: AppTheme.charcoal.withOpacity(0.5)),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${event.date} at ${event.time}',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: AppTheme.charcoal.withOpacity(0.6),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Icon(Icons.location_on,
-                          size: 14, color: AppTheme.charcoal.withOpacity(0.5)),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          event.location,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: AppTheme.charcoal.withOpacity(0.6),
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+              ).then((_) {
+                if (_tabController.index == 2) {
+                  _loadBookmarkedEvents();
+                }
+              });
+            },
+            onEdit: () => _editEvent(event),
+            onDelete: () => _deleteEvent(event.id),
+            onShare: () => _shareEvent(event),
+          );
+        },
       ),
     );
   }

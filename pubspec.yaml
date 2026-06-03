@@ -1,7 +1,7 @@
 name: vesak_go
 description: VesakGO Mobile App
 publish_to: 'none'
-version: 1.0.1+2
+version: 2.1.1+211
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
