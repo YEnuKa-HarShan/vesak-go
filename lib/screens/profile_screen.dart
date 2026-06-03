@@ -1,8 +1,11 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
 import '../services/supabase_service.dart';
 import '../services/session_service.dart';
 import '../constants.dart';
+import '../theme/app_theme.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -20,6 +23,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   int _userCurrentLevel = 0;
   bool _isLoading = true;
   List<Map<String, dynamic>> _leaderboard = [];
+  File? _avatarImage;
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
@@ -68,6 +73,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _pickAvatar() async {
+    final pickedFile = await _picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 512,
+      maxHeight: 512,
+      imageQuality: 85,
+    );
+
+    if (pickedFile != null) {
+      setState(() {
+        _avatarImage = File(pickedFile.path);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Avatar updated successfully!')),
+      );
+    }
+  }
+
   String _getInitials() {
     if (!_sessionService.isLoggedIn) {
       return 'G';
@@ -80,16 +103,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Logout', style: TextStyle(color: Colors.black)),
+        title: const Text('Logout', style: TextStyle(color: AppTheme.charcoal)),
         content: const Text('Are you sure you want to logout?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.black)),
+            child: const Text('Cancel',
+                style: TextStyle(color: AppTheme.charcoal)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Logout', style: TextStyle(color: Colors.red)),
+            child:
+                const Text('Logout', style: TextStyle(color: AppTheme.maroon)),
           ),
         ],
       ),
@@ -128,7 +153,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => ChangePasswordScreen(),
+        builder: (context) => const ChangePasswordScreen(),
       ),
     );
 
@@ -139,26 +164,105 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  void _showSettings() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Settings',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.charcoal,
+              ),
+            ),
+            const Divider(color: AppTheme.sand, height: 24),
+            ListTile(
+              leading: const Icon(Icons.notifications, color: AppTheme.saffron),
+              title: const Text('Notifications'),
+              subtitle: const Text('Event reminders and updates'),
+              trailing: Switch(
+                value: true,
+                onChanged: (value) {},
+                activeColor: AppTheme.saffron,
+              ),
+              onTap: () {},
+            ),
+            ListTile(
+              leading: const Icon(Icons.language, color: AppTheme.saffron),
+              title: const Text('Language'),
+              subtitle: const Text('සිංහල / English'),
+              trailing: const Icon(Icons.arrow_forward_ios,
+                  size: 16, color: AppTheme.charcoal),
+              onTap: () {},
+            ),
+            ListTile(
+              leading: const Icon(Icons.privacy_tip, color: AppTheme.saffron),
+              title: const Text('Privacy'),
+              subtitle: const Text('Manage your data'),
+              trailing: const Icon(Icons.arrow_forward_ios,
+                  size: 16, color: AppTheme.charcoal),
+              onTap: () {},
+            ),
+            ListTile(
+              leading: const Icon(Icons.help_outline, color: AppTheme.saffron),
+              title: const Text('Help & Support'),
+              subtitle: const Text('FAQ and contact us'),
+              trailing: const Icon(Icons.arrow_forward_ios,
+                  size: 16, color: AppTheme.charcoal),
+              onTap: () {},
+            ),
+            ListTile(
+              leading: const Icon(Icons.info, color: AppTheme.saffron),
+              title: const Text('About'),
+              subtitle: const Text('Version 1.0.0'),
+              trailing: const Icon(Icons.arrow_forward_ios,
+                  size: 16, color: AppTheme.charcoal),
+              onTap: () {},
+            ),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.sand,
       appBar: AppBar(
         title: const Text(
           'Profile',
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+          style: TextStyle(color: AppTheme.white, fontWeight: FontWeight.bold),
         ),
-        backgroundColor: Colors.white,
+        backgroundColor: AppTheme.navy,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          icon: const Icon(Icons.arrow_back, color: AppTheme.white),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings, color: AppTheme.white),
+            onPressed: _showSettings,
+          ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _loadData,
+              color: AppTheme.gold,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 child: Column(
@@ -171,6 +275,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     _buildLevelAndXp(),
                     const SizedBox(height: 24),
                     _buildActivityStats(),
+                    const SizedBox(height: 24),
+                    _buildBadges(),
                     const SizedBox(height: 24),
                     _buildLeaderboard(),
                     const SizedBox(height: 24),
@@ -185,23 +291,68 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildAvatar() {
     return Center(
-      child: Container(
-        width: 100,
-        height: 100,
-        decoration: BoxDecoration(
-          color: Colors.black,
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.grey[300]!, width: 2),
-        ),
-        child: Center(
-          child: Text(
-            _getInitials(),
-            style: const TextStyle(
-              fontSize: 36,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
+      child: GestureDetector(
+        onTap: _sessionService.isLoggedIn ? _pickAvatar : null,
+        child: Stack(
+          children: [
+            Container(
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [AppTheme.gold, AppTheme.saffron],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                shape: BoxShape.circle,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(3),
+                child: Container(
+                  decoration: const BoxDecoration(
+                    color: AppTheme.white,
+                    shape: BoxShape.circle,
+                  ),
+                  child: ClipOval(
+                    child: _avatarImage != null
+                        ? Image.file(
+                            _avatarImage!,
+                            width: 94,
+                            height: 94,
+                            fit: BoxFit.cover,
+                          )
+                        : Center(
+                            child: Text(
+                              _getInitials(),
+                              style: const TextStyle(
+                                fontSize: 36,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.charcoal,
+                              ),
+                            ),
+                          ),
+                  ),
+                ),
+              ),
             ),
-          ),
+            if (_sessionService.isLoggedIn)
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(
+                    color: AppTheme.saffron,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.camera_alt,
+                    size: 16,
+                    color: AppTheme.white,
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -213,8 +364,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
         margin: const EdgeInsets.symmetric(horizontal: 20),
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          border: Border.all(color: Colors.black, width: 1),
-          borderRadius: BorderRadius.circular(12),
+          color: AppTheme.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.charcoal.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Column(
           children: [
@@ -223,7 +381,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
-                color: Colors.black,
+                color: AppTheme.charcoal,
               ),
             ),
             const SizedBox(height: 8),
@@ -231,7 +389,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               'You are browsing as a guest',
               style: TextStyle(
                 fontSize: 14,
-                color: Colors.grey[600],
+                color: AppTheme.charcoal.withOpacity(0.6),
               ),
             ),
             const SizedBox(height: 16),
@@ -239,10 +397,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               onPressed: () {
                 Navigator.pop(context);
               },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.black,
-                foregroundColor: Colors.white,
-              ),
               child: const Text('Login / Register'),
             ),
           ],
@@ -255,27 +409,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
       margin: const EdgeInsets.symmetric(horizontal: 20),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.black, width: 1),
-        borderRadius: BorderRadius.circular(12),
+        color: AppTheme.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.charcoal.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.person, color: Colors.black, size: 20),
+              const Icon(Icons.person, color: AppTheme.saffron, size: 20),
               const SizedBox(width: 8),
               const Text(
                 'Personal Information',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black,
+                  color: AppTheme.charcoal,
                 ),
               ),
             ],
           ),
-          const Divider(color: Colors.black, height: 24),
+          const Divider(color: AppTheme.sand, height: 24),
           _buildInfoRow('Full Name', '${user.firstName} ${user.lastName}'),
           const SizedBox(height: 12),
           _buildInfoRow('Email', user.email),
@@ -299,7 +460,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             label,
             style: TextStyle(
               fontSize: 14,
-              color: Colors.grey[600],
+              color: AppTheme.charcoal.withOpacity(0.6),
             ),
           ),
         ),
@@ -308,7 +469,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             value,
             style: const TextStyle(
               fontSize: 14,
-              color: Colors.black,
+              color: AppTheme.charcoal,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -340,27 +501,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
       margin: const EdgeInsets.symmetric(horizontal: 20),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.black, width: 1),
-        borderRadius: BorderRadius.circular(12),
+        color: AppTheme.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.charcoal.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.emoji_events, color: Colors.black, size: 20),
+              const Icon(Icons.emoji_events, color: AppTheme.saffron, size: 20),
               const SizedBox(width: 8),
               const Text(
                 'Level & Progress',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black,
+                  color: AppTheme.charcoal,
                 ),
               ),
             ],
           ),
-          const Divider(color: Colors.black, height: 24),
+          const Divider(color: AppTheme.sand, height: 24),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -372,7 +540,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: Colors.black,
+                      color: AppTheme.charcoal,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -387,7 +555,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         'Level $currentLevel',
                         style: TextStyle(
                           fontSize: 14,
-                          color: Colors.grey[600],
+                          color: AppTheme.charcoal.withOpacity(0.6),
                         ),
                       ),
                     ],
@@ -402,7 +570,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: Colors.black,
+                      color: AppTheme.charcoal,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -410,7 +578,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     'Next: ${nextLevelXp - currentXp} XP',
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.grey[600],
+                      color: AppTheme.charcoal.withOpacity(0.6),
                     ),
                   ),
                 ],
@@ -418,19 +586,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          LinearProgressIndicator(
-            value: progress,
-            backgroundColor: Colors.grey[300],
-            color: Colors.black,
-            minHeight: 8,
-            borderRadius: BorderRadius.circular(4),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: progress,
+              backgroundColor: AppTheme.sand,
+              color: AppTheme.gold,
+              minHeight: 8,
+            ),
           ),
           const SizedBox(height: 8),
           Text(
             '${(progress * 100).toInt()}% to next level',
             style: TextStyle(
               fontSize: 12,
-              color: Colors.grey[600],
+              color: AppTheme.charcoal.withOpacity(0.6),
             ),
             textAlign: TextAlign.center,
           ),
@@ -448,27 +618,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
       margin: const EdgeInsets.symmetric(horizontal: 20),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.black, width: 1),
-        borderRadius: BorderRadius.circular(12),
+        color: AppTheme.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.charcoal.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.bar_chart, color: Colors.black, size: 20),
+              const Icon(Icons.bar_chart, color: AppTheme.saffron, size: 20),
               const SizedBox(width: 8),
               const Text(
                 'Activity Stats',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black,
+                  color: AppTheme.charcoal,
                 ),
               ),
             ],
           ),
-          const Divider(color: Colors.black, height: 24),
+          const Divider(color: AppTheme.sand, height: 24),
           Row(
             children: [
               Expanded(
@@ -495,14 +672,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildStatItem(String label, String value, IconData icon) {
     return Column(
       children: [
-        Icon(icon, color: Colors.black, size: 24),
+        Icon(icon, color: AppTheme.saffron, size: 24),
         const SizedBox(height: 8),
         Text(
           value,
           style: const TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.bold,
-            color: Colors.black,
+            color: AppTheme.charcoal,
           ),
         ),
         const SizedBox(height: 4),
@@ -510,11 +687,137 @@ class _ProfileScreenState extends State<ProfileScreen> {
           label,
           style: TextStyle(
             fontSize: 12,
-            color: Colors.grey[600],
+            color: AppTheme.charcoal.withOpacity(0.6),
           ),
           textAlign: TextAlign.center,
         ),
       ],
+    );
+  }
+
+  Widget _buildBadges() {
+    if (!_sessionService.isLoggedIn) {
+      return const SizedBox.shrink();
+    }
+
+    final userEvents = _userEventsCount;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppTheme.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.charcoal.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.emoji_events, color: AppTheme.saffron, size: 20),
+              const SizedBox(width: 8),
+              const Text(
+                'Achievements',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.charcoal,
+                ),
+              ),
+            ],
+          ),
+          const Divider(color: AppTheme.sand, height: 24),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              _buildBadgeItem(
+                'First Event',
+                userEvents >= 1,
+                '🏅',
+                'Create your first event',
+              ),
+              _buildBadgeItem(
+                'Event Creator',
+                userEvents >= 5,
+                '🏆',
+                'Create 5 events',
+              ),
+              _buildBadgeItem(
+                'Event Master',
+                userEvents >= 10,
+                '⭐',
+                'Create 10 events',
+              ),
+              _buildBadgeItem(
+                'Lantern Lover',
+                _userCurrentLevel >= 1,
+                '🏮',
+                'Reach Lantern level',
+              ),
+              _buildBadgeItem(
+                'Early Bird',
+                true,
+                '⏰',
+                'Joined VesakGO',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBadgeItem(
+      String name, bool earned, String icon, String description) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: earned ? AppTheme.gold.withOpacity(0.1) : AppTheme.sand,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: earned ? AppTheme.gold : AppTheme.sand,
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(icon, style: const TextStyle(fontSize: 20)),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                name,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: earned
+                      ? AppTheme.charcoal
+                      : AppTheme.charcoal.withOpacity(0.5),
+                ),
+              ),
+              Text(
+                description,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: earned
+                      ? AppTheme.charcoal.withOpacity(0.6)
+                      : AppTheme.charcoal.withOpacity(0.3),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -527,27 +830,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
       margin: const EdgeInsets.symmetric(horizontal: 20),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.black, width: 1),
-        borderRadius: BorderRadius.circular(12),
+        color: AppTheme.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.charcoal.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.leaderboard, color: Colors.black, size: 20),
+              const Icon(Icons.leaderboard, color: AppTheme.saffron, size: 20),
               const SizedBox(width: 8),
               const Text(
                 'Leaderboard - Top 10',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black,
+                  color: AppTheme.charcoal,
                 ),
               ),
             ],
           ),
-          const Divider(color: Colors.black, height: 24),
+          const Divider(color: AppTheme.sand, height: 24),
           if (_leaderboard.isEmpty)
             const Center(
               child: Padding(
@@ -560,7 +870,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: _leaderboard.length,
-              separatorBuilder: (context, index) => const Divider(),
+              separatorBuilder: (context, index) =>
+                  const Divider(color: AppTheme.sand),
               itemBuilder: (context, index) {
                 final user = _leaderboard[index];
                 final rank = index + 1;
@@ -580,12 +891,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           fontWeight:
                               rank <= 3 ? FontWeight.bold : FontWeight.normal,
                           color: rank == 1
-                              ? Colors.amber
+                              ? AppTheme.gold
                               : rank == 2
                                   ? Colors.grey
                                   : rank == 3
                                       ? Colors.brown
-                                      : Colors.black,
+                                      : AppTheme.charcoal,
                         ),
                       ),
                     ),
@@ -598,7 +909,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             style: const TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w500,
-                              color: Colors.black,
+                              color: AppTheme.charcoal,
                             ),
                           ),
                           Row(
@@ -612,7 +923,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 league,
                                 style: TextStyle(
                                   fontSize: 10,
-                                  color: Colors.grey[600],
+                                  color: AppTheme.charcoal.withOpacity(0.6),
                                 ),
                               ),
                             ],
@@ -625,7 +936,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
-                        color: Colors.black,
+                        color: AppTheme.charcoal,
                       ),
                     ),
                   ],
@@ -649,12 +960,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ElevatedButton(
             onPressed: _editProfile,
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.black,
-              foregroundColor: Colors.white,
               minimumSize: const Size(double.infinity, 50),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
             ),
             child: const Text('Edit Profile', style: TextStyle(fontSize: 16)),
           ),
@@ -662,12 +968,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           OutlinedButton(
             onPressed: _changePassword,
             style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.black,
-              side: const BorderSide(color: Colors.black),
               minimumSize: const Size(double.infinity, 50),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
             ),
             child:
                 const Text('Change Password', style: TextStyle(fontSize: 16)),
@@ -676,15 +977,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
           OutlinedButton(
             onPressed: _logout,
             style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.red,
-              side: const BorderSide(color: Colors.red),
+              foregroundColor: AppTheme.maroon,
+              side: const BorderSide(color: AppTheme.maroon),
               minimumSize: const Size(double.infinity, 50),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
             ),
             child: const Text('Log Out',
-                style: TextStyle(fontSize: 16, color: Colors.red)),
+                style: TextStyle(fontSize: 16, color: AppTheme.maroon)),
           ),
         ],
       ),
@@ -692,6 +990,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
+// EditProfileScreen
 class EditProfileScreen extends StatefulWidget {
   final String firstName;
   final String lastName;
@@ -777,14 +1076,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.sand,
       appBar: AppBar(
         title:
-            const Text('Edit Profile', style: TextStyle(color: Colors.black)),
-        backgroundColor: Colors.white,
+            const Text('Edit Profile', style: TextStyle(color: AppTheme.white)),
+        backgroundColor: AppTheme.navy,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          icon: const Icon(Icons.arrow_back, color: AppTheme.white),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -793,54 +1092,68 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         child: Column(
           children: [
             const SizedBox(height: 40),
-            const Icon(Icons.person_outline, size: 80, color: Colors.black),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppTheme.gold.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.person_outline,
+                size: 60,
+                color: AppTheme.gold,
+              ),
+            ),
             const SizedBox(height: 40),
             TextField(
               controller: _firstNameController,
               decoration: InputDecoration(
                 labelText: 'First Name',
-                labelStyle: const TextStyle(color: Colors.black),
+                labelStyle: const TextStyle(color: AppTheme.charcoal),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: Colors.black, width: 2),
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide:
+                      const BorderSide(color: AppTheme.saffron, width: 2),
                 ),
               ),
-              style: const TextStyle(color: Colors.black),
+              style: const TextStyle(color: AppTheme.charcoal),
             ),
             const SizedBox(height: 20),
             TextField(
               controller: _lastNameController,
               decoration: InputDecoration(
                 labelText: 'Last Name',
-                labelStyle: const TextStyle(color: Colors.black),
+                labelStyle: const TextStyle(color: AppTheme.charcoal),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: Colors.black, width: 2),
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide:
+                      const BorderSide(color: AppTheme.saffron, width: 2),
                 ),
               ),
-              style: const TextStyle(color: Colors.black),
+              style: const TextStyle(color: AppTheme.charcoal),
             ),
             const SizedBox(height: 20),
             TextField(
               controller: _emailController,
               decoration: InputDecoration(
                 labelText: 'Email',
-                labelStyle: const TextStyle(color: Colors.black),
+                labelStyle: const TextStyle(color: AppTheme.charcoal),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: Colors.black, width: 2),
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide:
+                      const BorderSide(color: AppTheme.saffron, width: 2),
                 ),
               ),
-              style: const TextStyle(color: Colors.black),
+              style: const TextStyle(color: AppTheme.charcoal),
               keyboardType: TextInputType.emailAddress,
             ),
             const SizedBox(height: 30),
@@ -849,32 +1162,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 Expanded(
                   child: OutlinedButton(
                     onPressed: _isLoading ? null : () => Navigator.pop(context),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.black,
-                      side: const BorderSide(color: Colors.black),
-                      minimumSize: const Size(double.infinity, 50),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    child: const Text('Cancel', style: TextStyle(fontSize: 16)),
+                    child: const Text('Cancel'),
                   ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: ElevatedButton(
                     onPressed: _isLoading ? null : _saveChanges,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.black,
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size(double.infinity, 50),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
                     child: _isLoading
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : const Text('Save', style: TextStyle(fontSize: 16)),
+                        ? const CircularProgressIndicator(color: AppTheme.white)
+                        : const Text('Save'),
                   ),
                 ),
               ],
@@ -886,6 +1183,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 }
 
+// ChangePasswordScreen
 class ChangePasswordScreen extends StatefulWidget {
   const ChangePasswordScreen({super.key});
 
@@ -960,14 +1258,14 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.sand,
       appBar: AppBar(
         title: const Text('Change Password',
-            style: TextStyle(color: Colors.black)),
-        backgroundColor: Colors.white,
+            style: TextStyle(color: AppTheme.white)),
+        backgroundColor: AppTheme.navy,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          icon: const Icon(Icons.arrow_back, color: AppTheme.white),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -976,25 +1274,37 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
         child: Column(
           children: [
             const SizedBox(height: 40),
-            const Icon(Icons.lock_outline, size: 80, color: Colors.black),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppTheme.gold.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.lock_outline,
+                size: 60,
+                color: AppTheme.gold,
+              ),
+            ),
             const SizedBox(height: 40),
             TextField(
               controller: _currentPasswordController,
               obscureText: _obscureCurrent,
               decoration: InputDecoration(
                 labelText: 'Current Password',
-                labelStyle: const TextStyle(color: Colors.black),
+                labelStyle: const TextStyle(color: AppTheme.charcoal),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: Colors.black, width: 2),
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide:
+                      const BorderSide(color: AppTheme.saffron, width: 2),
                 ),
                 suffixIcon: IconButton(
                   icon: Icon(
                     _obscureCurrent ? Icons.visibility_off : Icons.visibility,
-                    color: Colors.black,
+                    color: AppTheme.charcoal,
                   ),
                   onPressed: () {
                     setState(() {
@@ -1003,7 +1313,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                   },
                 ),
               ),
-              style: const TextStyle(color: Colors.black),
+              style: const TextStyle(color: AppTheme.charcoal),
             ),
             const SizedBox(height: 20),
             TextField(
@@ -1011,18 +1321,19 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
               obscureText: _obscureNew,
               decoration: InputDecoration(
                 labelText: 'New Password',
-                labelStyle: const TextStyle(color: Colors.black),
+                labelStyle: const TextStyle(color: AppTheme.charcoal),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: Colors.black, width: 2),
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide:
+                      const BorderSide(color: AppTheme.saffron, width: 2),
                 ),
                 suffixIcon: IconButton(
                   icon: Icon(
                     _obscureNew ? Icons.visibility_off : Icons.visibility,
-                    color: Colors.black,
+                    color: AppTheme.charcoal,
                   ),
                   onPressed: () {
                     setState(() {
@@ -1031,7 +1342,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                   },
                 ),
               ),
-              style: const TextStyle(color: Colors.black),
+              style: const TextStyle(color: AppTheme.charcoal),
             ),
             const SizedBox(height: 20),
             TextField(
@@ -1039,18 +1350,19 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
               obscureText: _obscureConfirm,
               decoration: InputDecoration(
                 labelText: 'Confirm New Password',
-                labelStyle: const TextStyle(color: Colors.black),
+                labelStyle: const TextStyle(color: AppTheme.charcoal),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: Colors.black, width: 2),
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide:
+                      const BorderSide(color: AppTheme.saffron, width: 2),
                 ),
                 suffixIcon: IconButton(
                   icon: Icon(
                     _obscureConfirm ? Icons.visibility_off : Icons.visibility,
-                    color: Colors.black,
+                    color: AppTheme.charcoal,
                   ),
                   onPressed: () {
                     setState(() {
@@ -1059,7 +1371,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                   },
                 ),
               ),
-              style: const TextStyle(color: Colors.black),
+              style: const TextStyle(color: AppTheme.charcoal),
             ),
             const SizedBox(height: 30),
             Row(
@@ -1067,32 +1379,16 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                 Expanded(
                   child: OutlinedButton(
                     onPressed: _isLoading ? null : () => Navigator.pop(context),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.black,
-                      side: const BorderSide(color: Colors.black),
-                      minimumSize: const Size(double.infinity, 50),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    child: const Text('Cancel', style: TextStyle(fontSize: 16)),
+                    child: const Text('Cancel'),
                   ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: ElevatedButton(
                     onPressed: _isLoading ? null : _changePassword,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.black,
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size(double.infinity, 50),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
                     child: _isLoading
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : const Text('Update', style: TextStyle(fontSize: 16)),
+                        ? const CircularProgressIndicator(color: AppTheme.white)
+                        : const Text('Update'),
                   ),
                 ),
               ],

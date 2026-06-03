@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
+import 'package:table_calendar/table_calendar.dart';
 import '../services/supabase_service.dart';
 import '../services/session_service.dart';
 import '../models/event_model.dart';
 import '../constants.dart';
+import '../theme/app_theme.dart';
+import 'event_details_screen.dart';
 
 class EventsScreen extends StatefulWidget {
-  const EventsScreen({super.key});
+  final int initialTab;
+
+  const EventsScreen({super.key, this.initialTab = 0});
 
   @override
   State<EventsScreen> createState() => _EventsScreenState();
@@ -23,26 +27,43 @@ class _EventsScreenState extends State<EventsScreen>
   List<EventModel> _allEvents = [];
   List<EventModel> _filteredMyEvents = [];
   List<EventModel> _filteredAllEvents = [];
+  List<EventModel> _bookmarkedEvents = [];
+
   bool _isLoading = true;
   String? _selectedCategory;
   String? _selectedStatus;
+  String _searchQuery = '';
+  final TextEditingController _searchController = TextEditingController();
+
+  bool _isCalendarView = false;
+  DateTime _focusedDay = DateTime.now();
+  DateTime? _selectedDay;
+  Map<DateTime, List<EventModel>> _eventsMap = {};
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController =
+        TabController(length: 3, vsync: this, initialIndex: widget.initialTab);
     _tabController.addListener(_onTabChanged);
     _loadEvents();
+    if (_sessionService.isLoggedIn) {
+      _loadBookmarkedEvents();
+    }
   }
 
   @override
   void dispose() {
     _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
   void _onTabChanged() {
+    if (_tabController.index == 2) {
+      _loadBookmarkedEvents();
+    }
     if (!_tabController.indexIsChanging) {
       setState(() {});
     }
@@ -65,15 +86,55 @@ class _EventsScreenState extends State<EventsScreen>
         _myEvents = [];
       }
       _applyFilters();
+      _buildEventsMap();
       _isLoading = false;
     });
+  }
+
+  Future<void> _loadBookmarkedEvents() async {
+    if (!_sessionService.isLoggedIn) return;
+
+    final bookmarked = await _supabaseService
+        .getBookmarkedEvents(_sessionService.currentUser!.id);
+    setState(() {
+      _bookmarkedEvents = bookmarked;
+    });
+  }
+
+  void _buildEventsMap() {
+    _eventsMap = {};
+    for (var event in _filteredAllEvents) {
+      try {
+        final date = DateTime.parse(event.date);
+        final key = DateTime(date.year, date.month, date.day);
+        if (_eventsMap.containsKey(key)) {
+          _eventsMap[key]!.add(event);
+        } else {
+          _eventsMap[key] = [event];
+        }
+      } catch (e) {
+        print('Error parsing date for event: ${event.title}');
+      }
+    }
   }
 
   void _applyFilters() {
     List<EventModel> filteredMy = List.from(_myEvents);
     List<EventModel> filteredAll = List.from(_allEvents);
 
-    // Apply status filter
+    if (_searchQuery.isNotEmpty) {
+      filteredMy = filteredMy
+          .where((event) =>
+              event.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+              event.location.toLowerCase().contains(_searchQuery.toLowerCase()))
+          .toList();
+      filteredAll = filteredAll
+          .where((event) =>
+              event.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+              event.location.toLowerCase().contains(_searchQuery.toLowerCase()))
+          .toList();
+    }
+
     if (_selectedStatus != null) {
       filteredMy =
           filteredMy.where((event) => _checkStatusFilter(event)).toList();
@@ -81,7 +142,6 @@ class _EventsScreenState extends State<EventsScreen>
           filteredAll.where((event) => _checkStatusFilter(event)).toList();
     }
 
-    // Apply category filter
     if (_selectedCategory != null) {
       filteredMy = filteredMy
           .where((event) => event.category == _selectedCategory)
@@ -95,6 +155,7 @@ class _EventsScreenState extends State<EventsScreen>
       _filteredMyEvents = filteredMy;
       _filteredAllEvents = filteredAll;
     });
+    _buildEventsMap();
   }
 
   bool _checkStatusFilter(EventModel event) {
@@ -108,7 +169,6 @@ class _EventsScreenState extends State<EventsScreen>
           if (eventDate.year == currentDate.year &&
               eventDate.month == currentDate.month &&
               eventDate.day == currentDate.day) {
-            // Parse event time and compare with current time
             try {
               final timeStr = event.time.toLowerCase();
               bool isPM = timeStr.contains('pm');
@@ -173,96 +233,127 @@ class _EventsScreenState extends State<EventsScreen>
     setState(() {
       _selectedCategory = null;
       _selectedStatus = null;
+      _searchQuery = '';
+      _searchController.clear();
       _applyFilters();
     });
   }
 
-  Future<void> _editEvent(EventModel event) async {
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => EditEventScreen(event: event),
-      ),
-    );
-
-    if (result == true) {
-      _loadEvents();
-    }
+  void _onDaySelected(DateTime selectedDay, DateTime focusedDay) {
+    setState(() {
+      _selectedDay = selectedDay;
+      _focusedDay = focusedDay;
+    });
   }
 
-  Future<void> _deleteEvent(String eventId) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title:
-            const Text('Delete Event', style: TextStyle(color: Colors.black)),
-        content: const Text('Are you sure you want to delete this event?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.black)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true) {
-      final success = await _supabaseService.deleteEvent(eventId);
-      if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Event deleted successfully')),
-        );
-        _loadEvents();
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to delete event')),
-        );
-      }
-    }
+  List<EventModel> _getEventsForDay(DateTime day) {
+    final key = DateTime(day.year, day.month, day.day);
+    return _eventsMap[key] ?? [];
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.sand,
       appBar: AppBar(
         title: const Text(
           'Events',
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+          style: TextStyle(color: AppTheme.white, fontWeight: FontWeight.bold),
         ),
-        backgroundColor: Colors.white,
+        backgroundColor: AppTheme.navy,
         elevation: 0,
         bottom: TabBar(
           controller: _tabController,
-          labelColor: Colors.black,
-          unselectedLabelColor: Colors.grey,
-          indicatorColor: Colors.black,
+          labelColor: AppTheme.gold,
+          unselectedLabelColor: AppTheme.white.withOpacity(0.6),
+          indicatorColor: AppTheme.gold,
           tabs: const [
             Tab(text: 'My Events'),
             Tab(text: 'All Events'),
+            Tab(text: 'Bookmarks'),
           ],
         ),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          icon: const Icon(Icons.arrow_back, color: AppTheme.white),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
-          if (_selectedCategory != null || _selectedStatus != null)
+          if (_tabController.index == 1)
+            IconButton(
+              icon: Icon(
+                _isCalendarView ? Icons.view_list : Icons.calendar_month,
+                color: AppTheme.white,
+              ),
+              onPressed: () {
+                setState(() {
+                  _isCalendarView = !_isCalendarView;
+                });
+              },
+            ),
+          if (_selectedCategory != null ||
+              _selectedStatus != null ||
+              _searchQuery.isNotEmpty)
             TextButton(
               onPressed: _clearAllFilters,
               child: const Text(
                 'Clear All',
-                style: TextStyle(color: Colors.black),
+                style: TextStyle(color: AppTheme.gold),
               ),
             ),
         ],
       ),
       body: Column(
         children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppTheme.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.charcoal.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: TextField(
+                controller: _searchController,
+                onChanged: (value) {
+                  setState(() {
+                    _searchQuery = value;
+                    _applyFilters();
+                  });
+                },
+                decoration: InputDecoration(
+                  hintText: 'Search events by title or location...',
+                  hintStyle:
+                      TextStyle(color: AppTheme.charcoal.withOpacity(0.5)),
+                  prefixIcon: Icon(Icons.search, color: AppTheme.saffron),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: Icon(Icons.clear,
+                              color: AppTheme.charcoal.withOpacity(0.5)),
+                          onPressed: () {
+                            setState(() {
+                              _searchQuery = '';
+                              _searchController.clear();
+                              _applyFilters();
+                            });
+                          },
+                        )
+                      : null,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  filled: true,
+                  fillColor: AppTheme.white,
+                ),
+              ),
+            ),
+          ),
           _buildStatusFilterChips(),
           _buildCategoryFilterChips(),
           Expanded(
@@ -270,11 +361,476 @@ class _EventsScreenState extends State<EventsScreen>
               controller: _tabController,
               children: [
                 _buildEventsList(_filteredMyEvents, isMyEvents: true),
-                _buildEventsList(_filteredAllEvents, isMyEvents: false),
+                _isCalendarView
+                    ? _buildCalendarView()
+                    : _buildEventsList(_filteredAllEvents, isMyEvents: false),
+                _buildBookmarksList(),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCalendarView() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return Column(
+      children: [
+        TableCalendar(
+          firstDay: DateTime.now().subtract(const Duration(days: 365)),
+          lastDay: DateTime.now().add(const Duration(days: 365)),
+          focusedDay: _focusedDay,
+          selectedDayPredicate: (day) {
+            return _selectedDay != null &&
+                day.year == _selectedDay!.year &&
+                day.month == _selectedDay!.month &&
+                day.day == _selectedDay!.day;
+          },
+          onDaySelected: _onDaySelected,
+          calendarFormat: CalendarFormat.month,
+          eventLoader: _getEventsForDay,
+          calendarStyle: CalendarStyle(
+            todayDecoration: BoxDecoration(
+              color: AppTheme.saffron.withOpacity(0.3),
+              shape: BoxShape.circle,
+            ),
+            selectedDecoration: BoxDecoration(
+              color: AppTheme.saffron,
+              shape: BoxShape.circle,
+            ),
+            weekendTextStyle: const TextStyle(color: AppTheme.maroon),
+            markerDecoration: BoxDecoration(
+              color: AppTheme.gold,
+              shape: BoxShape.circle,
+            ),
+          ),
+          headerStyle: HeaderStyle(
+            titleCentered: true,
+            formatButtonVisible: false,
+            titleTextStyle: const TextStyle(
+              color: AppTheme.charcoal,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+            leftChevronIcon: Icon(Icons.chevron_left, color: AppTheme.saffron),
+            rightChevronIcon:
+                Icon(Icons.chevron_right, color: AppTheme.saffron),
+          ),
+          daysOfWeekStyle: DaysOfWeekStyle(
+            weekdayStyle: TextStyle(color: AppTheme.charcoal.withOpacity(0.6)),
+            weekendStyle: TextStyle(color: AppTheme.maroon),
+          ),
+        ),
+        const SizedBox(height: 16),
+        if (_selectedDay != null)
+          Expanded(
+            child: _buildEventsList(_getEventsForDay(_selectedDay!),
+                isMyEvents: false),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildEventsList(List<EventModel> events, {required bool isMyEvents}) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (!_sessionService.isLoggedIn && isMyEvents) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.lock_outline,
+              size: 64,
+              color: AppTheme.charcoal.withOpacity(0.4),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Login to view your events',
+              style: TextStyle(
+                fontSize: 16,
+                color: AppTheme.charcoal.withOpacity(0.6),
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () async {
+                await Navigator.pushNamed(context, '/login');
+                _loadEvents();
+              },
+              child: const Text('Login Now'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (events.isEmpty) {
+      String message;
+      if (isMyEvents) {
+        if (_selectedCategory != null && _selectedStatus != null) {
+          message =
+              'No events found for $_selectedCategory category and ${_selectedStatus!.toUpperCase()} status';
+        } else if (_selectedCategory != null) {
+          message = 'No events found in "$_selectedCategory" category';
+        } else if (_selectedStatus != null) {
+          message = 'No ${_selectedStatus!.toUpperCase()} events found';
+        } else if (_searchQuery.isNotEmpty) {
+          message = 'No events found for "$_searchQuery"';
+        } else {
+          message = 'No events created yet';
+        }
+      } else {
+        if (_selectedCategory != null && _selectedStatus != null) {
+          message =
+              'No events found for $_selectedCategory category and ${_selectedStatus!.toUpperCase()} status';
+        } else if (_selectedCategory != null) {
+          message = 'No events found in "$_selectedCategory" category';
+        } else if (_selectedStatus != null) {
+          message = 'No ${_selectedStatus!.toUpperCase()} events found';
+        } else if (_searchQuery.isNotEmpty) {
+          message = 'No events found for "$_searchQuery"';
+        } else {
+          message = 'No events available';
+        }
+      }
+
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.event_busy,
+              size: 64,
+              color: AppTheme.charcoal.withOpacity(0.4),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              message,
+              style: TextStyle(
+                fontSize: 16,
+                color: AppTheme.charcoal.withOpacity(0.6),
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadEvents,
+      color: AppTheme.gold,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: events.length,
+        itemBuilder: (context, index) {
+          final event = events[index];
+          return _buildEventCard(event);
+        },
+      ),
+    );
+  }
+
+  Widget _buildBookmarksList() {
+    if (!_sessionService.isLoggedIn) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.bookmark_border,
+              size: 64,
+              color: AppTheme.charcoal.withOpacity(0.4),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Login to bookmark events',
+              style: TextStyle(
+                fontSize: 16,
+                color: AppTheme.charcoal.withOpacity(0.6),
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () async {
+                await Navigator.pushNamed(context, '/login');
+                _loadBookmarkedEvents();
+              },
+              child: const Text('Login Now'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_bookmarkedEvents.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.bookmark_border,
+              size: 64,
+              color: AppTheme.charcoal.withOpacity(0.4),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No bookmarked events yet',
+              style: TextStyle(
+                fontSize: 16,
+                color: AppTheme.charcoal.withOpacity(0.6),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Tap the bookmark icon on any event to save it here',
+              style: TextStyle(
+                fontSize: 12,
+                color: AppTheme.charcoal.withOpacity(0.4),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadBookmarkedEvents,
+      color: AppTheme.gold,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: _bookmarkedEvents.length,
+        itemBuilder: (context, index) {
+          final event = _bookmarkedEvents[index];
+          return _buildEventCard(event);
+        },
+      ),
+    );
+  }
+
+  Widget _buildEventCard(EventModel event) {
+    final categoryColor = AppConstants.getCategoryColor(event.category);
+    final displayIcon = event.getMarkerIcon();
+    final displayName = event.getCategoryDisplayName();
+
+    DateTime eventDate;
+    try {
+      eventDate = DateTime.parse(event.date);
+    } catch (e) {
+      eventDate = DateTime.now();
+    }
+    final day = DateFormat('dd').format(eventDate);
+    final month = DateFormat('MMM').format(eventDate);
+
+    bool isActive = false;
+    try {
+      final today = DateTime.now();
+      if (eventDate.year == today.year &&
+          eventDate.month == today.month &&
+          eventDate.day == today.day) {
+        final timeStr = event.time.toLowerCase();
+        bool isPM = timeStr.contains('pm');
+        final timeParts =
+            timeStr.replaceAll(RegExp(r'[apm]'), '').trim().split(':');
+        int hour = int.parse(timeParts[0]);
+        final minute = int.parse(timeParts[1]);
+        if (isPM && hour != 12) hour += 12;
+        if (!isPM && hour == 12) hour = 0;
+        final eventDateTime = DateTime(
+            eventDate.year, eventDate.month, eventDate.day, hour, minute);
+        isActive = eventDateTime.isAfter(DateTime.now());
+      }
+    } catch (e) {
+      isActive = false;
+    }
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => EventDetailsScreen(event: event),
+          ),
+        ).then((_) {
+          if (_tabController.index == 2) {
+            _loadBookmarkedEvents();
+          }
+        });
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        decoration: BoxDecoration(
+          color: AppTheme.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.charcoal.withOpacity(0.08),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: categoryColor.withOpacity(0.1),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(16),
+                  topRight: Radius.circular(16),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: categoryColor,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          day,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.white,
+                          ),
+                        ),
+                        Text(
+                          month,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: AppTheme.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          event.title,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.charcoal,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: categoryColor.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    displayIcon,
+                                    style: const TextStyle(fontSize: 10),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    displayName,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: categoryColor,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            if (isActive)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.forestGreen.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Text(
+                                  'Active',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: AppTheme.forestGreen,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.access_time,
+                          size: 14, color: AppTheme.charcoal.withOpacity(0.5)),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${event.date} at ${event.time}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppTheme.charcoal.withOpacity(0.6),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(Icons.location_on,
+                          size: 14, color: AppTheme.charcoal.withOpacity(0.5)),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          event.location,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppTheme.charcoal.withOpacity(0.6),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -291,14 +847,15 @@ class _EventsScreenState extends State<EventsScreen>
             label: const Text('All'),
             selected: _selectedStatus == null,
             onSelected: (_) => _applyStatusFilter(null),
-            backgroundColor: Colors.white,
-            selectedColor: Colors.black,
+            backgroundColor: AppTheme.white,
+            selectedColor: AppTheme.saffron,
             labelStyle: TextStyle(
-              color: _selectedStatus == null ? Colors.white : Colors.black,
+              color:
+                  _selectedStatus == null ? AppTheme.white : AppTheme.charcoal,
               fontWeight: FontWeight.w500,
             ),
             side: BorderSide(
-              color: Colors.black,
+              color: AppTheme.sand,
               width: _selectedStatus == null ? 0 : 1,
             ),
           ),
@@ -307,14 +864,16 @@ class _EventsScreenState extends State<EventsScreen>
             label: const Text('Active'),
             selected: _selectedStatus == 'active',
             onSelected: (_) => _applyStatusFilter('active'),
-            backgroundColor: Colors.white,
-            selectedColor: Colors.black,
+            backgroundColor: AppTheme.white,
+            selectedColor: AppTheme.saffron,
             labelStyle: TextStyle(
-              color: _selectedStatus == 'active' ? Colors.white : Colors.black,
+              color: _selectedStatus == 'active'
+                  ? AppTheme.white
+                  : AppTheme.charcoal,
               fontWeight: FontWeight.w500,
             ),
             side: BorderSide(
-              color: Colors.black,
+              color: AppTheme.sand,
               width: _selectedStatus == 'active' ? 0 : 1,
             ),
           ),
@@ -323,14 +882,16 @@ class _EventsScreenState extends State<EventsScreen>
             label: const Text('Today'),
             selected: _selectedStatus == 'today',
             onSelected: (_) => _applyStatusFilter('today'),
-            backgroundColor: Colors.white,
-            selectedColor: Colors.black,
+            backgroundColor: AppTheme.white,
+            selectedColor: AppTheme.saffron,
             labelStyle: TextStyle(
-              color: _selectedStatus == 'today' ? Colors.white : Colors.black,
+              color: _selectedStatus == 'today'
+                  ? AppTheme.white
+                  : AppTheme.charcoal,
               fontWeight: FontWeight.w500,
             ),
             side: BorderSide(
-              color: Colors.black,
+              color: AppTheme.sand,
               width: _selectedStatus == 'today' ? 0 : 1,
             ),
           ),
@@ -339,15 +900,16 @@ class _EventsScreenState extends State<EventsScreen>
             label: const Text('Tomorrow'),
             selected: _selectedStatus == 'tomorrow',
             onSelected: (_) => _applyStatusFilter('tomorrow'),
-            backgroundColor: Colors.white,
-            selectedColor: Colors.black,
+            backgroundColor: AppTheme.white,
+            selectedColor: AppTheme.saffron,
             labelStyle: TextStyle(
-              color:
-                  _selectedStatus == 'tomorrow' ? Colors.white : Colors.black,
+              color: _selectedStatus == 'tomorrow'
+                  ? AppTheme.white
+                  : AppTheme.charcoal,
               fontWeight: FontWeight.w500,
             ),
             side: BorderSide(
-              color: Colors.black,
+              color: AppTheme.sand,
               width: _selectedStatus == 'tomorrow' ? 0 : 1,
             ),
           ),
@@ -368,14 +930,16 @@ class _EventsScreenState extends State<EventsScreen>
             label: const Text('All'),
             selected: _selectedCategory == null,
             onSelected: (_) => _applyCategoryFilter(null),
-            backgroundColor: Colors.white,
-            selectedColor: Colors.black,
+            backgroundColor: AppTheme.white,
+            selectedColor: AppTheme.saffron,
             labelStyle: TextStyle(
-              color: _selectedCategory == null ? Colors.white : Colors.black,
+              color: _selectedCategory == null
+                  ? AppTheme.white
+                  : AppTheme.charcoal,
               fontWeight: FontWeight.w500,
             ),
             side: BorderSide(
-              color: Colors.black,
+              color: AppTheme.sand,
               width: _selectedCategory == null ? 0 : 1,
             ),
           ),
@@ -397,717 +961,22 @@ class _EventsScreenState extends State<EventsScreen>
                 ),
                 selected: _selectedCategory == category,
                 onSelected: (_) => _applyCategoryFilter(category),
-                backgroundColor: Colors.white,
-                selectedColor: Colors.black,
+                backgroundColor: AppTheme.white,
+                selectedColor: AppTheme.saffron,
                 labelStyle: TextStyle(
                   color: _selectedCategory == category
-                      ? Colors.white
-                      : Colors.black,
+                      ? AppTheme.white
+                      : AppTheme.charcoal,
                   fontWeight: FontWeight.w500,
                 ),
                 side: BorderSide(
-                  color: Colors.black,
+                  color: AppTheme.sand,
                   width: _selectedCategory == category ? 0 : 1,
                 ),
               ),
             );
           }),
         ],
-      ),
-    );
-  }
-
-  Widget _buildEventsList(List<EventModel> events, {required bool isMyEvents}) {
-    if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
-    }
-
-    if (!_sessionService.isLoggedIn && isMyEvents) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.lock_outline,
-              size: 64,
-              color: Colors.grey[400],
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Login to view your events',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey,
-              ),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () async {
-                await Navigator.pushNamed(context, '/login');
-                _loadEvents();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.black,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Login Now'),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (events.isEmpty) {
-      String message;
-      if (isMyEvents) {
-        if (_selectedCategory != null && _selectedStatus != null) {
-          message =
-              'No events found for $_selectedCategory category and ${_selectedStatus!.toUpperCase()} status';
-        } else if (_selectedCategory != null) {
-          message = 'No events found in "$_selectedCategory" category';
-        } else if (_selectedStatus != null) {
-          message = 'No ${_selectedStatus!.toUpperCase()} events found';
-        } else {
-          message = 'No events created yet';
-        }
-      } else {
-        if (_selectedCategory != null && _selectedStatus != null) {
-          message =
-              'No events found for $_selectedCategory category and ${_selectedStatus!.toUpperCase()} status';
-        } else if (_selectedCategory != null) {
-          message = 'No events found in "$_selectedCategory" category';
-        } else if (_selectedStatus != null) {
-          message = 'No ${_selectedStatus!.toUpperCase()} events found';
-        } else {
-          message = 'No events available';
-        }
-      }
-
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.event_busy,
-              size: 64,
-              color: Colors.grey[400],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              message,
-              style: const TextStyle(
-                fontSize: 16,
-                color: Colors.grey,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            if (isMyEvents &&
-                _sessionService.isLoggedIn &&
-                _selectedCategory == null &&
-                _selectedStatus == null)
-              const SizedBox(height: 20),
-            if (isMyEvents &&
-                _sessionService.isLoggedIn &&
-                _selectedCategory == null &&
-                _selectedStatus == null)
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.black,
-                  foregroundColor: Colors.white,
-                ),
-                child: const Text('Create Event'),
-              ),
-            if (_selectedCategory != null || _selectedStatus != null)
-              const SizedBox(height: 20),
-            if (_selectedCategory != null || _selectedStatus != null)
-              OutlinedButton(
-                onPressed: _clearAllFilters,
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.black,
-                  side: const BorderSide(color: Colors.black),
-                ),
-                child: const Text('Clear Filters'),
-              ),
-          ],
-        ),
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: _loadEvents,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: events.length,
-        itemBuilder: (context, index) {
-          final event = events[index];
-          final isOwner = _sessionService.isLoggedIn &&
-              event.userId == _sessionService.currentUser?.id;
-          return _buildEventCard(event, isOwner: isOwner);
-        },
-      ),
-    );
-  }
-
-  Widget _buildEventCard(EventModel event, {required bool isOwner}) {
-    final categoryColor = AppConstants.getCategoryColor(event.category);
-    final displayIcon = event.getMarkerIcon();
-    final displayName = event.getCategoryDisplayName();
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.black, width: 1),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.black,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(11),
-                topRight: Radius.circular(11),
-              ),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 12,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    color: categoryColor,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        event.title,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.white24,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              displayIcon,
-                              style: const TextStyle(fontSize: 11),
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              displayName,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (isOwner)
-                  PopupMenuButton<String>(
-                    icon: const Icon(Icons.more_vert, color: Colors.white),
-                    onSelected: (value) async {
-                      if (value == 'edit') {
-                        await _editEvent(event);
-                      } else if (value == 'delete') {
-                        await _deleteEvent(event.id);
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(
-                        value: 'edit',
-                        child: Row(
-                          children: [
-                            Icon(Icons.edit, size: 20),
-                            SizedBox(width: 8),
-                            Text('Edit'),
-                          ],
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'delete',
-                        child: Row(
-                          children: [
-                            Icon(Icons.delete, size: 20, color: Colors.red),
-                            SizedBox(width: 8),
-                            Text('Delete', style: TextStyle(color: Colors.red)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (event.description != null && event.description!.isNotEmpty)
-                  Column(
-                    children: [
-                      Text(
-                        event.description!,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                  ),
-                Row(
-                  children: [
-                    const Icon(Icons.calendar_today,
-                        size: 16, color: Colors.black54),
-                    const SizedBox(width: 4),
-                    Text(
-                      event.date,
-                      style:
-                          const TextStyle(fontSize: 12, color: Colors.black54),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const Icon(Icons.access_time,
-                        size: 16, color: Colors.black54),
-                    const SizedBox(width: 4),
-                    Text(
-                      event.time,
-                      style:
-                          const TextStyle(fontSize: 12, color: Colors.black54),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const Icon(Icons.location_on,
-                        size: 16, color: Colors.black54),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        event.location,
-                        style: const TextStyle(
-                            fontSize: 12, color: Colors.black54),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const Icon(Icons.person, size: 16, color: Colors.black54),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Created by: ${event.createdBy}',
-                      style:
-                          const TextStyle(fontSize: 12, color: Colors.black54),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Created: ${_formatDate(event.createdAt)}',
-                  style: const TextStyle(fontSize: 11, color: Colors.grey),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _formatDate(DateTime date) {
-    return DateFormat('dd/MM/yyyy').format(date);
-  }
-}
-
-// EditEventScreen remains the same
-class EditEventScreen extends StatefulWidget {
-  final EventModel event;
-
-  const EditEventScreen({super.key, required this.event});
-
-  @override
-  State<EditEventScreen> createState() => _EditEventScreenState();
-}
-
-class _EditEventScreenState extends State<EditEventScreen> {
-  late String _selectedCategory;
-  late String _selectedFoodType;
-  late TextEditingController _titleController;
-  late TextEditingController _descriptionController;
-  late TextEditingController _locationController;
-  late TextEditingController _dateController;
-  late TextEditingController _timeController;
-  final SupabaseService _supabaseService = SupabaseService();
-  bool _isLoading = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _selectedCategory = widget.event.category;
-    _selectedFoodType = widget.event.foodType;
-    _titleController = TextEditingController(text: widget.event.title);
-    _descriptionController =
-        TextEditingController(text: widget.event.description ?? '');
-    _locationController = TextEditingController(text: widget.event.location);
-    _dateController = TextEditingController(text: widget.event.date);
-    _timeController = TextEditingController(text: widget.event.time);
-  }
-
-  @override
-  void dispose() {
-    _titleController.dispose();
-    _descriptionController.dispose();
-    _locationController.dispose();
-    _dateController.dispose();
-    _timeController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _handleUpdateEvent() async {
-    if (_titleController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter event title')),
-      );
-      return;
-    }
-
-    if (_locationController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter event location')),
-      );
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-    });
-
-    double latitude = widget.event.latitude;
-    double longitude = widget.event.longitude;
-
-    try {
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission != LocationPermission.denied &&
-          permission != LocationPermission.deniedForever) {
-        Position position = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high,
-          timeLimit: const Duration(seconds: 10),
-        );
-        latitude = position.latitude;
-        longitude = position.longitude;
-      }
-    } catch (e) {
-      print('Could not get coordinates: $e');
-    }
-
-    final success = await _supabaseService.updateEvent(
-      eventId: widget.event.id,
-      category: _selectedCategory,
-      title: _titleController.text,
-      description: _descriptionController.text.isEmpty
-          ? ''
-          : _descriptionController.text,
-      date: _dateController.text,
-      time: _timeController.text,
-      location: _locationController.text,
-      latitude: latitude,
-      longitude: longitude,
-      foodType: _selectedCategory == 'දන්සල' ? _selectedFoodType : 'none',
-    );
-
-    setState(() {
-      _isLoading = false;
-    });
-
-    if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Event updated successfully!')),
-      );
-      Navigator.pop(context, true);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to update event')),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: const Text('Edit Event', style: TextStyle(color: Colors.black)),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 20),
-            Center(
-              child: Icon(
-                Icons.edit,
-                size: 80,
-                color: Colors.black,
-              ),
-            ),
-            const SizedBox(height: 30),
-            const Text(
-              'Edit Event Details',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.black,
-              ),
-            ),
-            const SizedBox(height: 20),
-            DropdownButtonFormField<String>(
-              value: _selectedCategory,
-              decoration: InputDecoration(
-                labelText: 'Category *',
-                labelStyle: const TextStyle(color: Colors.black),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: Colors.black, width: 2),
-                ),
-              ),
-              items: AppConstants.eventCategories.map((category) {
-                return DropdownMenuItem(
-                  value: category,
-                  child: Row(
-                    children: [
-                      Text(
-                        AppConstants.getCategoryIcon(category),
-                        style: const TextStyle(fontSize: 16),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(category),
-                    ],
-                  ),
-                );
-              }).toList(),
-              onChanged: (value) {
-                setState(() {
-                  _selectedCategory = value!;
-                  if (value != 'දන්සල') {
-                    _selectedFoodType = 'none';
-                  }
-                });
-              },
-              style: const TextStyle(color: Colors.black),
-              dropdownColor: Colors.white,
-              icon: const Icon(Icons.arrow_drop_down, color: Colors.black),
-            ),
-            const SizedBox(height: 20),
-            if (_selectedCategory == 'දන්සල')
-              Column(
-                children: [
-                  DropdownButtonFormField<String>(
-                    value:
-                        _selectedFoodType == 'none' ? null : _selectedFoodType,
-                    decoration: InputDecoration(
-                      labelText: 'Food Type *',
-                      labelStyle: const TextStyle(color: Colors.black),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide:
-                            const BorderSide(color: Colors.black, width: 2),
-                      ),
-                    ),
-                    items: AppConstants.foodTypes.map((food) {
-                      return DropdownMenuItem(
-                        value: food['sinhala'],
-                        child: Row(
-                          children: [
-                            Text(
-                              food['emoji']!,
-                              style: const TextStyle(fontSize: 20),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(food['sinhala']!),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        _selectedFoodType = value!;
-                      });
-                    },
-                    style: const TextStyle(color: Colors.black),
-                    dropdownColor: Colors.white,
-                    icon:
-                        const Icon(Icons.arrow_drop_down, color: Colors.black),
-                  ),
-                  const SizedBox(height: 20),
-                ],
-              ),
-            TextField(
-              controller: _titleController,
-              decoration: InputDecoration(
-                labelText: 'Event Title *',
-                labelStyle: const TextStyle(color: Colors.black),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: Colors.black, width: 2),
-                ),
-              ),
-              style: const TextStyle(color: Colors.black),
-            ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: _descriptionController,
-              maxLines: 3,
-              decoration: InputDecoration(
-                labelText: 'Description',
-                labelStyle: const TextStyle(color: Colors.black),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: Colors.black, width: 2),
-                ),
-              ),
-              style: const TextStyle(color: Colors.black),
-            ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: _dateController,
-              decoration: InputDecoration(
-                labelText: 'Date *',
-                labelStyle: const TextStyle(color: Colors.black),
-                hintText: 'YYYY-MM-DD',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: Colors.black, width: 2),
-                ),
-              ),
-              style: const TextStyle(color: Colors.black),
-            ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: _timeController,
-              decoration: InputDecoration(
-                labelText: 'Time *',
-                labelStyle: const TextStyle(color: Colors.black),
-                hintText: 'HH:MM AM/PM',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: Colors.black, width: 2),
-                ),
-              ),
-              style: const TextStyle(color: Colors.black),
-            ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: _locationController,
-              decoration: InputDecoration(
-                labelText: 'Location *',
-                labelStyle: const TextStyle(color: Colors.black),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: Colors.black, width: 2),
-                ),
-              ),
-              style: const TextStyle(color: Colors.black),
-            ),
-            const SizedBox(height: 30),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: _isLoading ? null : () => Navigator.pop(context),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.black,
-                      side: const BorderSide(color: Colors.black),
-                      minimumSize: const Size(double.infinity, 50),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    child: const Text('Cancel', style: TextStyle(fontSize: 16)),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : _handleUpdateEvent,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.black,
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size(double.infinity, 50),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    child: _isLoading
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : const Text('Update Event',
-                            style: TextStyle(fontSize: 16)),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
       ),
     );
   }

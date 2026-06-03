@@ -5,6 +5,7 @@ import '../services/supabase_service.dart';
 import '../services/location_service.dart';
 import '../services/session_service.dart';
 import '../constants.dart';
+import '../theme/app_theme.dart';
 
 class CreateEventScreen extends StatefulWidget {
   final String userId;
@@ -29,6 +30,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   DateTime? _selectedDate;
   TimeOfDay? _selectedTime;
   final TextEditingController _locationController = TextEditingController();
+  final TextEditingController _contactController = TextEditingController();
 
   bool _isLoading = false;
   bool _isGettingLocation = false;
@@ -61,8 +63,8 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
       builder: (context, child) {
         return Theme(
           data: ThemeData.light().copyWith(
-            primaryColor: Colors.black,
-            colorScheme: const ColorScheme.light(primary: Colors.black),
+            primaryColor: AppTheme.saffron,
+            colorScheme: const ColorScheme.light(primary: AppTheme.saffron),
             buttonTheme:
                 const ButtonThemeData(textTheme: ButtonTextTheme.primary),
           ),
@@ -85,8 +87,8 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
       builder: (context, child) {
         return Theme(
           data: ThemeData.light().copyWith(
-            primaryColor: Colors.black,
-            colorScheme: const ColorScheme.light(primary: Colors.black),
+            primaryColor: AppTheme.saffron,
+            colorScheme: const ColorScheme.light(primary: AppTheme.saffron),
           ),
           child: child!,
         );
@@ -216,14 +218,14 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.sand,
       appBar: AppBar(
         title:
-            const Text('Create Event', style: TextStyle(color: Colors.black)),
-        backgroundColor: Colors.white,
+            const Text('Create Event', style: TextStyle(color: AppTheme.white)),
+        backgroundColor: AppTheme.navy,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          icon: const Icon(Icons.arrow_back, color: AppTheme.white),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -234,33 +236,51 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
           children: [
             const SizedBox(height: 20),
             Center(
-              child: Icon(
-                Icons.event_available,
-                size: 80,
-                color: Colors.black,
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: AppTheme.gold.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.event_available,
+                  size: 60,
+                  color: AppTheme.gold,
+                ),
               ),
             ),
             const SizedBox(height: 30),
             const Text(
-              'Event Details',
+              'Create New Event',
               style: TextStyle(
-                fontSize: 20,
+                fontSize: 24,
                 fontWeight: FontWeight.bold,
-                color: Colors.black,
+                color: AppTheme.charcoal,
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 8),
+            Text(
+              'Share your Vesak celebration with the community',
+              style: TextStyle(
+                fontSize: 14,
+                color: AppTheme.charcoal.withOpacity(0.6),
+              ),
+            ),
+            const SizedBox(height: 30),
+
+            // Category
             DropdownButtonFormField<String>(
               value: _selectedCategory,
               decoration: InputDecoration(
                 labelText: 'Category *',
-                labelStyle: const TextStyle(color: Colors.black),
+                labelStyle: const TextStyle(color: AppTheme.charcoal),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: Colors.black, width: 2),
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide:
+                      const BorderSide(color: AppTheme.saffron, width: 2),
                 ),
               ),
               items: AppConstants.eventCategories.map((category) {
@@ -270,9 +290,9 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                     children: [
                       Text(
                         AppConstants.getCategoryIcon(category),
-                        style: const TextStyle(fontSize: 16),
+                        style: const TextStyle(fontSize: 20),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 12),
                       Text(category),
                     ],
                   ),
@@ -286,11 +306,13 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                   }
                 });
               },
-              style: const TextStyle(color: Colors.black),
-              dropdownColor: Colors.white,
-              icon: const Icon(Icons.arrow_drop_down, color: Colors.black),
+              style: const TextStyle(color: AppTheme.charcoal),
+              dropdownColor: AppTheme.white,
+              icon: const Icon(Icons.arrow_drop_down, color: AppTheme.charcoal),
             ),
             const SizedBox(height: 20),
+
+            // Food Type (conditional)
             if (_selectedCategory == 'දන්සල')
               Column(
                 children: [
@@ -298,14 +320,14 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                     value: _selectedFoodType,
                     decoration: InputDecoration(
                       labelText: 'Food Type *',
-                      labelStyle: const TextStyle(color: Colors.black),
+                      labelStyle: const TextStyle(color: AppTheme.charcoal),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(12),
                       ),
                       focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(12),
                         borderSide:
-                            const BorderSide(color: Colors.black, width: 2),
+                            const BorderSide(color: AppTheme.saffron, width: 2),
                       ),
                     ),
                     items: AppConstants.foodTypes.map((food) {
@@ -315,9 +337,9 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                           children: [
                             Text(
                               food['emoji']!,
-                              style: const TextStyle(fontSize: 20),
+                              style: const TextStyle(fontSize: 24),
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(width: 12),
                             Text(food['sinhala']!),
                           ],
                         ),
@@ -328,76 +350,88 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                         _selectedFoodType = value;
                       });
                     },
-                    style: const TextStyle(color: Colors.black),
-                    dropdownColor: Colors.white,
-                    icon:
-                        const Icon(Icons.arrow_drop_down, color: Colors.black),
+                    style: const TextStyle(color: AppTheme.charcoal),
+                    dropdownColor: AppTheme.white,
+                    icon: const Icon(Icons.arrow_drop_down,
+                        color: AppTheme.charcoal),
                   ),
                   const SizedBox(height: 20),
                 ],
               ),
+
+            // Title
             TextField(
               controller: _titleController,
               decoration: InputDecoration(
                 labelText: 'Event Title *',
-                labelStyle: const TextStyle(color: Colors.black),
+                labelStyle: const TextStyle(color: AppTheme.charcoal),
+                hintText: 'e.g., Vesak Lantern Festival',
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: Colors.black, width: 2),
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide:
+                      const BorderSide(color: AppTheme.saffron, width: 2),
                 ),
               ),
-              style: const TextStyle(color: Colors.black),
+              style: const TextStyle(color: AppTheme.charcoal),
             ),
             const SizedBox(height: 20),
+
+            // Description
             TextField(
               controller: _descriptionController,
               maxLines: 3,
               decoration: InputDecoration(
                 labelText: 'Description (Optional)',
-                labelStyle: const TextStyle(color: Colors.black),
+                labelStyle: const TextStyle(color: AppTheme.charcoal),
+                hintText: 'Tell people about your event...',
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: Colors.black, width: 2),
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide:
+                      const BorderSide(color: AppTheme.saffron, width: 2),
                 ),
               ),
-              style: const TextStyle(color: Colors.black),
+              style: const TextStyle(color: AppTheme.charcoal),
             ),
             const SizedBox(height: 20),
+
+            // Date Picker
             GestureDetector(
               onTap: _selectDate,
               child: AbsorbPointer(
                 child: TextField(
                   controller: TextEditingController(
                     text: _selectedDate != null
-                        ? DateFormat('yyyy-MM-dd').format(_selectedDate!)
+                        ? DateFormat('EEEE, MMM d, yyyy').format(_selectedDate!)
                         : '',
                   ),
                   decoration: InputDecoration(
                     labelText: 'Date *',
-                    labelStyle: const TextStyle(color: Colors.black),
+                    labelStyle: const TextStyle(color: AppTheme.charcoal),
                     hintText: 'Select date',
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(12),
                     ),
                     focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(12),
                       borderSide:
-                          const BorderSide(color: Colors.black, width: 2),
+                          const BorderSide(color: AppTheme.saffron, width: 2),
                     ),
                     suffixIcon:
-                        const Icon(Icons.calendar_today, color: Colors.black),
+                        Icon(Icons.calendar_today, color: AppTheme.saffron),
                   ),
-                  style: const TextStyle(color: Colors.black),
+                  style: const TextStyle(color: AppTheme.charcoal),
                 ),
               ),
             ),
             const SizedBox(height: 20),
+
+            // Time Picker
             GestureDetector(
               onTap: _selectTime,
               child: AbsorbPointer(
@@ -409,65 +443,166 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                   ),
                   decoration: InputDecoration(
                     labelText: 'Time *',
-                    labelStyle: const TextStyle(color: Colors.black),
+                    labelStyle: const TextStyle(color: AppTheme.charcoal),
                     hintText: 'Select time',
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(12),
                     ),
                     focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(12),
                       borderSide:
-                          const BorderSide(color: Colors.black, width: 2),
+                          const BorderSide(color: AppTheme.saffron, width: 2),
                     ),
                     suffixIcon:
-                        const Icon(Icons.access_time, color: Colors.black),
+                        Icon(Icons.access_time, color: AppTheme.saffron),
                   ),
-                  style: const TextStyle(color: Colors.black),
+                  style: const TextStyle(color: AppTheme.charcoal),
                 ),
               ),
             ),
             const SizedBox(height: 20),
+
+            // Location with auto-fill
             TextField(
               controller: _locationController,
               decoration: InputDecoration(
                 labelText: 'Location *',
-                labelStyle: const TextStyle(color: Colors.black),
-                hintText: 'Auto-filled from device location',
+                labelStyle: const TextStyle(color: AppTheme.charcoal),
+                hintText: 'Event address',
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: Colors.black, width: 2),
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide:
+                      const BorderSide(color: AppTheme.saffron, width: 2),
                 ),
                 suffixIcon: _isGettingLocation
                     ? const SizedBox(
                         width: 20,
                         height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                        child: Padding(
+                          padding: EdgeInsets.all(12),
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
                       )
                     : IconButton(
-                        icon:
-                            const Icon(Icons.my_location, color: Colors.black),
+                        icon: Icon(Icons.my_location, color: AppTheme.saffron),
                         onPressed: _getCurrentLocation,
                       ),
               ),
-              style: const TextStyle(color: Colors.black),
+              style: const TextStyle(color: AppTheme.charcoal),
+            ),
+            const SizedBox(height: 20),
+
+            // Contact Info (New Field)
+            TextField(
+              controller: _contactController,
+              decoration: InputDecoration(
+                labelText: 'Contact Info (Optional)',
+                labelStyle: const TextStyle(color: AppTheme.charcoal),
+                hintText: 'Phone number or email for inquiries',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide:
+                      const BorderSide(color: AppTheme.saffron, width: 2),
+                ),
+                prefixIcon: Icon(Icons.contact_phone, color: AppTheme.saffron),
+              ),
+              style: const TextStyle(color: AppTheme.charcoal),
+              keyboardType: TextInputType.phone,
             ),
             const SizedBox(height: 30),
-            ElevatedButton(
-              onPressed: _isLoading ? null : _handleCreateEvent,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.black,
-                foregroundColor: Colors.white,
-                minimumSize: const Size(double.infinity, 50),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+
+            // Preview Card
+            if (_selectedCategory != null &&
+                _titleController.text.isNotEmpty &&
+                _selectedDate != null &&
+                _selectedTime != null)
+              Container(
+                margin: const EdgeInsets.only(bottom: 20),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppTheme.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppTheme.sand, width: 1),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Preview',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.charcoal,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: AppConstants.getCategoryColor(
+                                _selectedCategory!),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Center(
+                            child: Text(
+                              AppConstants.getCategoryIcon(_selectedCategory!),
+                              style: const TextStyle(fontSize: 20),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _titleController.text,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.charcoal,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                '${DateFormat('MMM d, yyyy').format(_selectedDate!)} at ${_selectedTime!.format(context)}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: AppTheme.charcoal.withOpacity(0.6),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-              child: _isLoading
-                  ? const CircularProgressIndicator(color: Colors.white)
-                  : const Text('Create Event', style: TextStyle(fontSize: 16)),
+
+            // Create Button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _isLoading ? null : _handleCreateEvent,
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+                child: _isLoading
+                    ? const CircularProgressIndicator(color: AppTheme.white)
+                    : const Text('Create Event',
+                        style: TextStyle(fontSize: 16)),
+              ),
             ),
           ],
         ),
@@ -480,6 +615,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
     _titleController.dispose();
     _descriptionController.dispose();
     _locationController.dispose();
+    _contactController.dispose();
     super.dispose();
   }
 }

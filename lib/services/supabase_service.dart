@@ -454,4 +454,80 @@ class SupabaseService {
       return [];
     }
   }
+
+  // Bookmark methods
+  Future<bool> addBookmark(String userId, String eventId) async {
+    try {
+      final existing = await _supabase
+          .from('bookmarks')
+          .select()
+          .eq('user_id', userId)
+          .eq('event_id', eventId)
+          .maybeSingle();
+
+      if (existing != null) return true;
+
+      await _supabase.from('bookmarks').insert({
+        'user_id': userId,
+        'event_id': eventId,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+      return true;
+    } catch (e) {
+      print('Add bookmark error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> removeBookmark(String userId, String eventId) async {
+    try {
+      await _supabase
+          .from('bookmarks')
+          .delete()
+          .eq('user_id', userId)
+          .eq('event_id', eventId);
+      return true;
+    } catch (e) {
+      print('Remove bookmark error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> isBookmarked(String userId, String eventId) async {
+    try {
+      final result = await _supabase
+          .from('bookmarks')
+          .select()
+          .eq('user_id', userId)
+          .eq('event_id', eventId)
+          .maybeSingle();
+      return result != null;
+    } catch (e) {
+      print('Check bookmark error: $e');
+      return false;
+    }
+  }
+
+  Future<List<EventModel>> getBookmarkedEvents(String userId) async {
+    try {
+      final bookmarks = await _supabase
+          .from('bookmarks')
+          .select('event_id')
+          .eq('user_id', userId);
+
+      if (bookmarks.isEmpty) return [];
+
+      final eventIds = bookmarks.map((b) => b['event_id']).toList();
+      final events = await _supabase
+          .from('events')
+          .select('*')
+          .inFilter('id', eventIds)
+          .order('created_at', ascending: false);
+
+      return events.map((json) => EventModel.fromJson(json)).toList();
+    } catch (e) {
+      print('Get bookmarked events error: $e');
+      return [];
+    }
+  }
 }
