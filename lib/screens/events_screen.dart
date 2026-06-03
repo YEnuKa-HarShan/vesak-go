@@ -25,6 +25,7 @@ class _EventsScreenState extends State<EventsScreen>
   List<EventModel> _filteredAllEvents = [];
   bool _isLoading = true;
   String? _selectedCategory;
+  String? _selectedStatus;
 
   @override
   void initState() {
@@ -63,30 +64,116 @@ class _EventsScreenState extends State<EventsScreen>
       } else {
         _myEvents = [];
       }
-      _applyFilter();
+      _applyFilters();
       _isLoading = false;
     });
   }
 
-  void _applyFilter() {
-    if (_selectedCategory == null) {
-      _filteredMyEvents = List.from(_myEvents);
-      _filteredAllEvents = List.from(_allEvents);
-    } else {
-      _filteredMyEvents = _myEvents
+  void _applyFilters() {
+    List<EventModel> filteredMy = List.from(_myEvents);
+    List<EventModel> filteredAll = List.from(_allEvents);
+
+    // Apply status filter
+    if (_selectedStatus != null) {
+      filteredMy =
+          filteredMy.where((event) => _checkStatusFilter(event)).toList();
+      filteredAll =
+          filteredAll.where((event) => _checkStatusFilter(event)).toList();
+    }
+
+    // Apply category filter
+    if (_selectedCategory != null) {
+      filteredMy = filteredMy
           .where((event) => event.category == _selectedCategory)
           .toList();
-      _filteredAllEvents = _allEvents
+      filteredAll = filteredAll
           .where((event) => event.category == _selectedCategory)
           .toList();
     }
-    setState(() {});
+
+    setState(() {
+      _filteredMyEvents = filteredMy;
+      _filteredAllEvents = filteredAll;
+    });
   }
 
-  void _filterByCategory(String? category) {
+  bool _checkStatusFilter(EventModel event) {
+    try {
+      final eventDate = DateTime.parse(event.date);
+      final currentDate = DateTime.now();
+      final nextDay = currentDate.add(const Duration(days: 1));
+
+      switch (_selectedStatus) {
+        case 'active':
+          if (eventDate.year == currentDate.year &&
+              eventDate.month == currentDate.month &&
+              eventDate.day == currentDate.day) {
+            // Parse event time and compare with current time
+            try {
+              final timeStr = event.time.toLowerCase();
+              bool isPM = timeStr.contains('pm');
+              final timeParts =
+                  timeStr.replaceAll(RegExp(r'[apm]'), '').trim().split(':');
+              int hour = int.parse(timeParts[0]);
+              final minute = int.parse(timeParts[1]);
+
+              if (isPM && hour != 12) hour += 12;
+              if (!isPM && hour == 12) hour = 0;
+
+              final eventDateTime = DateTime(
+                  eventDate.year, eventDate.month, eventDate.day, hour, minute);
+              return eventDateTime.isAfter(DateTime.now());
+            } catch (e) {
+              return false;
+            }
+          }
+          return false;
+
+        case 'today':
+          return eventDate.year == currentDate.year &&
+              eventDate.month == currentDate.month &&
+              eventDate.day == currentDate.day;
+
+        case 'tomorrow':
+          return eventDate.year == nextDay.year &&
+              eventDate.month == nextDay.month &&
+              eventDate.day == nextDay.day;
+
+        default:
+          return true;
+      }
+    } catch (e) {
+      return false;
+    }
+  }
+
+  void _applyStatusFilter(String? status) {
     setState(() {
-      _selectedCategory = category;
-      _applyFilter();
+      if (_selectedStatus == status) {
+        _selectedStatus = null;
+      } else {
+        _selectedStatus = status;
+      }
+      _applyFilters();
+    });
+  }
+
+  void _applyCategoryFilter(String? category) {
+    setState(() {
+      if (_selectedCategory == category) {
+        _selectedCategory = null;
+      } else {
+        _selectedCategory = category;
+      }
+      _applyFilters();
+    });
+  }
+
+  void _clearAllFilters() {
+    setState(() {
+      _selectedCategory = null;
+      _selectedStatus = null;
+      _applyFilters();
     });
   }
 
@@ -163,9 +250,20 @@ class _EventsScreenState extends State<EventsScreen>
           icon: const Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          if (_selectedCategory != null || _selectedStatus != null)
+            TextButton(
+              onPressed: _clearAllFilters,
+              child: const Text(
+                'Clear All',
+                style: TextStyle(color: Colors.black),
+              ),
+            ),
+        ],
       ),
       body: Column(
         children: [
+          _buildStatusFilterChips(),
           _buildCategoryFilterChips(),
           Expanded(
             child: TabBarView(
@@ -181,10 +279,87 @@ class _EventsScreenState extends State<EventsScreen>
     );
   }
 
+  Widget _buildStatusFilterChips() {
+    return Container(
+      height: 45,
+      margin: const EdgeInsets.only(top: 8),
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        children: [
+          FilterChip(
+            label: const Text('All'),
+            selected: _selectedStatus == null,
+            onSelected: (_) => _applyStatusFilter(null),
+            backgroundColor: Colors.white,
+            selectedColor: Colors.black,
+            labelStyle: TextStyle(
+              color: _selectedStatus == null ? Colors.white : Colors.black,
+              fontWeight: FontWeight.w500,
+            ),
+            side: BorderSide(
+              color: Colors.black,
+              width: _selectedStatus == null ? 0 : 1,
+            ),
+          ),
+          const SizedBox(width: 8),
+          FilterChip(
+            label: const Text('Active'),
+            selected: _selectedStatus == 'active',
+            onSelected: (_) => _applyStatusFilter('active'),
+            backgroundColor: Colors.white,
+            selectedColor: Colors.black,
+            labelStyle: TextStyle(
+              color: _selectedStatus == 'active' ? Colors.white : Colors.black,
+              fontWeight: FontWeight.w500,
+            ),
+            side: BorderSide(
+              color: Colors.black,
+              width: _selectedStatus == 'active' ? 0 : 1,
+            ),
+          ),
+          const SizedBox(width: 8),
+          FilterChip(
+            label: const Text('Today'),
+            selected: _selectedStatus == 'today',
+            onSelected: (_) => _applyStatusFilter('today'),
+            backgroundColor: Colors.white,
+            selectedColor: Colors.black,
+            labelStyle: TextStyle(
+              color: _selectedStatus == 'today' ? Colors.white : Colors.black,
+              fontWeight: FontWeight.w500,
+            ),
+            side: BorderSide(
+              color: Colors.black,
+              width: _selectedStatus == 'today' ? 0 : 1,
+            ),
+          ),
+          const SizedBox(width: 8),
+          FilterChip(
+            label: const Text('Tomorrow'),
+            selected: _selectedStatus == 'tomorrow',
+            onSelected: (_) => _applyStatusFilter('tomorrow'),
+            backgroundColor: Colors.white,
+            selectedColor: Colors.black,
+            labelStyle: TextStyle(
+              color:
+                  _selectedStatus == 'tomorrow' ? Colors.white : Colors.black,
+              fontWeight: FontWeight.w500,
+            ),
+            side: BorderSide(
+              color: Colors.black,
+              width: _selectedStatus == 'tomorrow' ? 0 : 1,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildCategoryFilterChips() {
     return Container(
-      height: 50,
-      margin: const EdgeInsets.only(top: 8, bottom: 8),
+      height: 45,
+      margin: const EdgeInsets.only(bottom: 8),
       child: ListView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -192,7 +367,7 @@ class _EventsScreenState extends State<EventsScreen>
           FilterChip(
             label: const Text('All'),
             selected: _selectedCategory == null,
-            onSelected: (_) => _filterByCategory(null),
+            onSelected: (_) => _applyCategoryFilter(null),
             backgroundColor: Colors.white,
             selectedColor: Colors.black,
             labelStyle: TextStyle(
@@ -203,21 +378,25 @@ class _EventsScreenState extends State<EventsScreen>
               color: Colors.black,
               width: _selectedCategory == null ? 0 : 1,
             ),
-            shape: StadiumBorder(
-              side: BorderSide(
-                color: Colors.black,
-                width: _selectedCategory == null ? 0 : 1,
-              ),
-            ),
           ),
           const SizedBox(width: 8),
           ...AppConstants.eventCategories.map((category) {
             return Padding(
               padding: const EdgeInsets.only(right: 8),
               child: FilterChip(
-                label: Text(category),
+                label: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      AppConstants.getCategoryIcon(category),
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(category),
+                  ],
+                ),
                 selected: _selectedCategory == category,
-                onSelected: (_) => _filterByCategory(category),
+                onSelected: (_) => _applyCategoryFilter(category),
                 backgroundColor: Colors.white,
                 selectedColor: Colors.black,
                 labelStyle: TextStyle(
@@ -229,12 +408,6 @@ class _EventsScreenState extends State<EventsScreen>
                 side: BorderSide(
                   color: Colors.black,
                   width: _selectedCategory == category ? 0 : 1,
-                ),
-                shape: StadiumBorder(
-                  side: BorderSide(
-                    color: Colors.black,
-                    width: _selectedCategory == category ? 0 : 1,
-                  ),
                 ),
               ),
             );
@@ -289,13 +462,27 @@ class _EventsScreenState extends State<EventsScreen>
     if (events.isEmpty) {
       String message;
       if (isMyEvents) {
-        message = _selectedCategory == null
-            ? 'No events created yet'
-            : 'No events found in "$_selectedCategory" category';
+        if (_selectedCategory != null && _selectedStatus != null) {
+          message =
+              'No events found for $_selectedCategory category and ${_selectedStatus!.toUpperCase()} status';
+        } else if (_selectedCategory != null) {
+          message = 'No events found in "$_selectedCategory" category';
+        } else if (_selectedStatus != null) {
+          message = 'No ${_selectedStatus!.toUpperCase()} events found';
+        } else {
+          message = 'No events created yet';
+        }
       } else {
-        message = _selectedCategory == null
-            ? 'No events available'
-            : 'No events found in "$_selectedCategory" category';
+        if (_selectedCategory != null && _selectedStatus != null) {
+          message =
+              'No events found for $_selectedCategory category and ${_selectedStatus!.toUpperCase()} status';
+        } else if (_selectedCategory != null) {
+          message = 'No events found in "$_selectedCategory" category';
+        } else if (_selectedStatus != null) {
+          message = 'No ${_selectedStatus!.toUpperCase()} events found';
+        } else {
+          message = 'No events available';
+        }
       }
 
       return Center(
@@ -318,11 +505,13 @@ class _EventsScreenState extends State<EventsScreen>
             ),
             if (isMyEvents &&
                 _sessionService.isLoggedIn &&
-                _selectedCategory == null)
+                _selectedCategory == null &&
+                _selectedStatus == null)
               const SizedBox(height: 20),
             if (isMyEvents &&
                 _sessionService.isLoggedIn &&
-                _selectedCategory == null)
+                _selectedCategory == null &&
+                _selectedStatus == null)
               ElevatedButton(
                 onPressed: () {
                   Navigator.pop(context);
@@ -333,15 +522,16 @@ class _EventsScreenState extends State<EventsScreen>
                 ),
                 child: const Text('Create Event'),
               ),
-            if (_selectedCategory != null) const SizedBox(height: 20),
-            if (_selectedCategory != null)
+            if (_selectedCategory != null || _selectedStatus != null)
+              const SizedBox(height: 20),
+            if (_selectedCategory != null || _selectedStatus != null)
               OutlinedButton(
-                onPressed: () => _filterByCategory(null),
+                onPressed: _clearAllFilters,
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.black,
                   side: const BorderSide(color: Colors.black),
                 ),
-                child: const Text('Clear Filter'),
+                child: const Text('Clear Filters'),
               ),
           ],
         ),
@@ -562,6 +752,7 @@ class _EventsScreenState extends State<EventsScreen>
   }
 }
 
+// EditEventScreen remains the same
 class EditEventScreen extends StatefulWidget {
   final EventModel event;
 

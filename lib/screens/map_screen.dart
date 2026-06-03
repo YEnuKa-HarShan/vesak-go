@@ -25,6 +25,7 @@ class _MapScreenState extends State<MapScreen> {
   List<EventModel> _allEvents = [];
   List<EventModel> _filteredEvents = [];
   String? _selectedCategory;
+  String? _selectedStatus;
 
   @override
   void initState() {
@@ -43,25 +44,106 @@ class _MapScreenState extends State<MapScreen> {
     final events = await _supabaseService.getEventsForMap();
     setState(() {
       _allEvents = events;
-      _applyFilter();
+      _applyFilters();
     });
   }
 
-  void _applyFilter() {
-    if (_selectedCategory == null) {
-      _filteredEvents = List.from(_allEvents);
-    } else {
-      _filteredEvents = _allEvents
+  void _applyFilters() {
+    List<EventModel> filtered = List.from(_allEvents);
+
+    // Apply status filter
+    if (_selectedStatus != null) {
+      filtered = filtered.where((event) => _checkStatusFilter(event)).toList();
+    }
+
+    // Apply category filter
+    if (_selectedCategory != null) {
+      filtered = filtered
           .where((event) => event.category == _selectedCategory)
           .toList();
     }
-    setState(() {});
+
+    setState(() {
+      _filteredEvents = filtered;
+    });
   }
 
-  void _filterByCategory(String? category) {
+  bool _checkStatusFilter(EventModel event) {
+    try {
+      final eventDate = DateTime.parse(event.date);
+      final currentDate = DateTime.now();
+      final nextDay = currentDate.add(const Duration(days: 1));
+
+      switch (_selectedStatus) {
+        case 'active':
+          if (eventDate.year == currentDate.year &&
+              eventDate.month == currentDate.month &&
+              eventDate.day == currentDate.day) {
+            try {
+              final timeStr = event.time.toLowerCase();
+              bool isPM = timeStr.contains('pm');
+              final timeParts =
+                  timeStr.replaceAll(RegExp(r'[apm]'), '').trim().split(':');
+              int hour = int.parse(timeParts[0]);
+              final minute = int.parse(timeParts[1]);
+
+              if (isPM && hour != 12) hour += 12;
+              if (!isPM && hour == 12) hour = 0;
+
+              final eventDateTime = DateTime(
+                  eventDate.year, eventDate.month, eventDate.day, hour, minute);
+              return eventDateTime.isAfter(DateTime.now());
+            } catch (e) {
+              return false;
+            }
+          }
+          return false;
+
+        case 'today':
+          return eventDate.year == currentDate.year &&
+              eventDate.month == currentDate.month &&
+              eventDate.day == currentDate.day;
+
+        case 'tomorrow':
+          return eventDate.year == nextDay.year &&
+              eventDate.month == nextDay.month &&
+              eventDate.day == nextDay.day;
+
+        default:
+          return true;
+      }
+    } catch (e) {
+      return false;
+    }
+  }
+
+  void _applyStatusFilter(String? status) {
     setState(() {
-      _selectedCategory = category;
-      _applyFilter();
+      if (_selectedStatus == status) {
+        _selectedStatus = null;
+      } else {
+        _selectedStatus = status;
+      }
+      _applyFilters();
+    });
+  }
+
+  void _applyCategoryFilter(String? category) {
+    setState(() {
+      if (_selectedCategory == category) {
+        _selectedCategory = null;
+      } else {
+        _selectedCategory = category;
+      }
+      _applyFilters();
+    });
+  }
+
+  void _clearAllFilters() {
+    setState(() {
+      _selectedCategory = null;
+      _selectedStatus = null;
+      _applyFilters();
     });
   }
 
@@ -429,6 +511,14 @@ class _MapScreenState extends State<MapScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
+          if (_selectedCategory != null || _selectedStatus != null)
+            TextButton(
+              onPressed: _clearAllFilters,
+              child: const Text(
+                'Clear All',
+                style: TextStyle(color: Colors.black),
+              ),
+            ),
           IconButton(
             icon: const Icon(Icons.info_outline, color: Colors.black),
             onPressed: _showLegend,
@@ -437,16 +527,99 @@ class _MapScreenState extends State<MapScreen> {
       ),
       body: Column(
         children: [
-          SizedBox(
-            height: 50,
+          // Status Filter Chips
+          Container(
+            height: 45,
+            margin: const EdgeInsets.only(top: 8),
             child: ListView(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              children: [
+                FilterChip(
+                  label: const Text('All'),
+                  selected: _selectedStatus == null,
+                  onSelected: (_) => _applyStatusFilter(null),
+                  backgroundColor: Colors.white,
+                  selectedColor: Colors.black,
+                  labelStyle: TextStyle(
+                    color:
+                        _selectedStatus == null ? Colors.white : Colors.black,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  side: BorderSide(
+                    color: Colors.black,
+                    width: _selectedStatus == null ? 0 : 1,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilterChip(
+                  label: const Text('Active'),
+                  selected: _selectedStatus == 'active',
+                  onSelected: (_) => _applyStatusFilter('active'),
+                  backgroundColor: Colors.white,
+                  selectedColor: Colors.black,
+                  labelStyle: TextStyle(
+                    color: _selectedStatus == 'active'
+                        ? Colors.white
+                        : Colors.black,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  side: BorderSide(
+                    color: Colors.black,
+                    width: _selectedStatus == 'active' ? 0 : 1,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilterChip(
+                  label: const Text('Today'),
+                  selected: _selectedStatus == 'today',
+                  onSelected: (_) => _applyStatusFilter('today'),
+                  backgroundColor: Colors.white,
+                  selectedColor: Colors.black,
+                  labelStyle: TextStyle(
+                    color: _selectedStatus == 'today'
+                        ? Colors.white
+                        : Colors.black,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  side: BorderSide(
+                    color: Colors.black,
+                    width: _selectedStatus == 'today' ? 0 : 1,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilterChip(
+                  label: const Text('Tomorrow'),
+                  selected: _selectedStatus == 'tomorrow',
+                  onSelected: (_) => _applyStatusFilter('tomorrow'),
+                  backgroundColor: Colors.white,
+                  selectedColor: Colors.black,
+                  labelStyle: TextStyle(
+                    color: _selectedStatus == 'tomorrow'
+                        ? Colors.white
+                        : Colors.black,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  side: BorderSide(
+                    color: Colors.black,
+                    width: _selectedStatus == 'tomorrow' ? 0 : 1,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Category Filter Chips
+          Container(
+            height: 45,
+            margin: const EdgeInsets.only(bottom: 8),
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               children: [
                 FilterChip(
                   label: const Text('All'),
                   selected: _selectedCategory == null,
-                  onSelected: (_) => _filterByCategory(null),
+                  onSelected: (_) => _applyCategoryFilter(null),
                   backgroundColor: Colors.white,
                   selectedColor: Colors.black,
                   labelStyle: TextStyle(
@@ -476,7 +649,7 @@ class _MapScreenState extends State<MapScreen> {
                         ],
                       ),
                       selected: _selectedCategory == category,
-                      onSelected: (_) => _filterByCategory(category),
+                      onSelected: (_) => _applyCategoryFilter(category),
                       backgroundColor: Colors.white,
                       selectedColor: Colors.black,
                       labelStyle: TextStyle(
@@ -518,7 +691,6 @@ class _MapScreenState extends State<MapScreen> {
                       urlTemplate: AppConstants.mapTileUrl,
                       userAgentPackageName: 'com.example.vesak_go',
                     ),
-                    // User location marker
                     if (_currentLocation != null)
                       MarkerLayer(
                         markers: [
@@ -534,7 +706,6 @@ class _MapScreenState extends State<MapScreen> {
                           ),
                         ],
                       ),
-                    // Event markers - Emoji only, decreased size
                     if (_filteredEvents.isNotEmpty)
                       MarkerLayer(
                         markers: _filteredEvents.map((event) {
@@ -565,7 +736,6 @@ class _MapScreenState extends State<MapScreen> {
                           );
                         }).toList(),
                       ),
-                    // Show message when no events
                     if (_filteredEvents.isEmpty && !_isLoading)
                       const Center(
                         child: Column(
