@@ -5,7 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import '../constants.dart';
 import '../services/supabase_service.dart';
 import '../models/event_model.dart';
-import '../widgets/pulse_dot.dart';
+import '../theme/app_theme.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -51,12 +51,10 @@ class _MapScreenState extends State<MapScreen> {
   void _applyFilters() {
     List<EventModel> filtered = List.from(_allEvents);
 
-    // Apply status filter
     if (_selectedStatus != null) {
       filtered = filtered.where((event) => _checkStatusFilter(event)).toList();
     }
 
-    // Apply category filter
     if (_selectedCategory != null) {
       filtered = filtered
           .where((event) => event.category == _selectedCategory)
@@ -203,17 +201,134 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  double _getEmojiSize() {
-    if (_currentZoom < 12) return 18;
-    if (_currentZoom < 14) return 22;
-    if (_currentZoom < 16) return 26;
-    return 30;
+  Widget _buildEventMarker(EventModel event, double zoom) {
+    final icon = event.getMarkerIcon();
+    final color = AppConstants.getCategoryColor(event.category);
+
+    // Zoom < 12: Color dot only (no emoji)
+    if (zoom < 12) {
+      return GestureDetector(
+        onTap: () => _showEventDetails(event),
+        behavior: HitTestBehavior.opaque,
+        child: SizedBox(
+          width: 44,
+          height: 44,
+          child: Center(
+            child: Container(
+              width: 12,
+              height: 12,
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.25),
+                    blurRadius: 2,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Zoom 12-14: Colored dot with small emoji inside
+    else if (zoom < 14) {
+      return GestureDetector(
+        onTap: () => _showEventDetails(event),
+        behavior: HitTestBehavior.opaque,
+        child: SizedBox(
+          width: 44,
+          height: 44,
+          child: Center(
+            child: Container(
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+                border: Border.all(color: AppTheme.white, width: 1.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.25),
+                    blurRadius: 2,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Text(
+                  icon,
+                  style: const TextStyle(fontSize: 10, color: AppTheme.white),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Zoom 14-16: Emoji only (medium)
+    else if (zoom < 16) {
+      return GestureDetector(
+        onTap: () => _showEventDetails(event),
+        behavior: HitTestBehavior.opaque,
+        child: SizedBox(
+          width: 44,
+          height: 44,
+          child: Center(
+            child: Text(
+              icon,
+              style: const TextStyle(
+                fontSize: 20,
+                shadows: [
+                  Shadow(
+                    color: Colors.black26,
+                    blurRadius: 3,
+                    offset: Offset(0, 1),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Zoom >= 16: Emoji only (large)
+    else {
+      return GestureDetector(
+        onTap: () => _showEventDetails(event),
+        behavior: HitTestBehavior.opaque,
+        child: SizedBox(
+          width: 48,
+          height: 48,
+          child: Center(
+            child: Text(
+              icon,
+              style: const TextStyle(
+                fontSize: 26,
+                shadows: [
+                  Shadow(
+                    color: Colors.black26,
+                    blurRadius: 3,
+                    offset: Offset(0, 1),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
   }
 
   void _showLegend() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.white,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -232,7 +347,7 @@ class _MapScreenState extends State<MapScreen> {
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: Colors.grey[300],
+                    color: AppTheme.sand,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -242,26 +357,33 @@ class _MapScreenState extends State<MapScreen> {
                   style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: Colors.black),
+                      color: AppTheme.charcoal),
                 ),
-                const Divider(color: Colors.black, height: 24),
+                const Divider(color: AppTheme.sand, height: 24),
                 Expanded(
                   child: ListView(
                     controller: scrollController,
                     children: [
+                      // User Location
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.grey[50],
-                          borderRadius: BorderRadius.circular(8),
+                          color: AppTheme.sand,
+                          borderRadius: BorderRadius.circular(12),
                         ),
                         child: Row(
                           children: [
                             Container(
-                              width: 30,
-                              height: 30,
-                              child: const PulseDot(
-                                  size: 20, color: Colors.blue, duration: 2),
+                              width: 40,
+                              height: 40,
+                              decoration: const BoxDecoration(
+                                color: Colors.blue,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Center(
+                                child: Icon(Icons.my_location,
+                                    size: 20, color: AppTheme.white),
+                              ),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
@@ -273,12 +395,14 @@ class _MapScreenState extends State<MapScreen> {
                                     style: TextStyle(
                                         fontSize: 14,
                                         fontWeight: FontWeight.bold,
-                                        color: Colors.black),
+                                        color: AppTheme.charcoal),
                                   ),
-                                  const Text(
-                                    'Blue pulsing dot - Your current position',
+                                  Text(
+                                    'Blue dot - Your current position',
                                     style: TextStyle(
-                                        fontSize: 12, color: Colors.grey),
+                                        fontSize: 12,
+                                        color:
+                                            AppTheme.charcoal.withOpacity(0.6)),
                                   ),
                                 ],
                               ),
@@ -286,15 +410,65 @@ class _MapScreenState extends State<MapScreen> {
                           ],
                         ),
                       ),
+
                       const SizedBox(height: 16),
+
+                      // Zoom Level Legend
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppTheme.sand,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Zoom Level Guide',
+                              style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.charcoal),
+                            ),
+                            const SizedBox(height: 12),
+                            _buildLegendZoomItem(
+                              'Zoom Out (< 12)',
+                              'Colored dots only',
+                              'Shows event density',
+                            ),
+                            const SizedBox(height: 8),
+                            _buildLegendZoomItem(
+                              'Medium Zoom (12-14)',
+                              'Colored dots + small emojis',
+                              'Shows category type',
+                            ),
+                            const SizedBox(height: 8),
+                            _buildLegendZoomItem(
+                              'Zoom In (14-16)',
+                              'Medium emojis only',
+                              'Clear category identification',
+                            ),
+                            const SizedBox(height: 8),
+                            _buildLegendZoomItem(
+                              'Max Zoom (> 16)',
+                              'Large emojis only',
+                              'Easy to tap and read',
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+
                       const Text(
-                        'Event Markers',
+                        'Event Categories',
                         style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
-                            color: Colors.black),
+                            color: AppTheme.charcoal),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 12),
+
                       ...AppConstants.eventCategories.map((category) {
                         final color = AppConstants.getCategoryColor(category);
                         final icon = AppConstants.getCategoryIcon(category);
@@ -305,22 +479,22 @@ class _MapScreenState extends State<MapScreen> {
                               vertical: 8, horizontal: 12),
                           margin: const EdgeInsets.only(bottom: 8),
                           decoration: BoxDecoration(
-                            color: Colors.grey[50],
-                            borderRadius: BorderRadius.circular(8),
+                            color: AppTheme.sand,
+                            borderRadius: BorderRadius.circular(12),
                           ),
                           child: Row(
                             children: [
                               Container(
-                                width: 24,
-                                height: 24,
+                                width: 40,
+                                height: 40,
                                 decoration: BoxDecoration(
                                   color: color,
                                   shape: BoxShape.circle,
                                 ),
                                 child: Center(
                                   child: Text(
-                                    category == 'දන්සල' ? '🍛' : icon,
-                                    style: const TextStyle(fontSize: 12),
+                                    icon,
+                                    style: const TextStyle(fontSize: 20),
                                   ),
                                 ),
                               ),
@@ -334,12 +508,14 @@ class _MapScreenState extends State<MapScreen> {
                                       style: const TextStyle(
                                           fontSize: 14,
                                           fontWeight: FontWeight.bold,
-                                          color: Colors.black),
+                                          color: AppTheme.charcoal),
                                     ),
                                     Text(
                                       name,
-                                      style: const TextStyle(
-                                          fontSize: 11, color: Colors.grey),
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          color: AppTheme.charcoal
+                                              .withOpacity(0.6)),
                                     ),
                                   ],
                                 ),
@@ -348,6 +524,7 @@ class _MapScreenState extends State<MapScreen> {
                           ),
                         );
                       }),
+
                       const SizedBox(height: 20),
                     ],
                   ),
@@ -360,10 +537,51 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
+  Widget _buildLegendZoomItem(
+      String title, String subtitle, String description) {
+    return Row(
+      children: [
+        Container(
+          width: 4,
+          height: 4,
+          decoration: BoxDecoration(
+            color: AppTheme.saffron,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.charcoal),
+              ),
+              Text(
+                subtitle,
+                style: TextStyle(
+                    fontSize: 11, color: AppTheme.charcoal.withOpacity(0.7)),
+              ),
+              Text(
+                description,
+                style: TextStyle(
+                    fontSize: 10, color: AppTheme.charcoal.withOpacity(0.5)),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   void _showEventDetails(EventModel event) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -377,109 +595,75 @@ class _MapScreenState extends State<MapScreen> {
               children: [
                 Text(
                   event.getMarkerIcon(),
-                  style: const TextStyle(fontSize: 24),
+                  style: const TextStyle(fontSize: 28),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     event.title,
                     style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: Colors.black),
+                        color: AppTheme.charcoal),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 12),
-            Text(
-              event.getCategoryDisplayName(),
-              style: TextStyle(
-                  fontSize: 14,
-                  color: AppConstants.getCategoryColor(event.category)),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppConstants.getCategoryColor(event.category)
+                    .withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                event.getCategoryDisplayName(),
+                style: TextStyle(
+                    fontSize: 12,
+                    color: AppConstants.getCategoryColor(event.category)),
+              ),
             ),
             if (event.category == 'දන්සල' && event.foodType != 'none')
               Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  'Food: ${event.foodType}',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(
+                  children: [
+                    const Icon(Icons.restaurant,
+                        size: 14, color: AppTheme.charcoal),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Food: ${event.foodType}',
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.charcoal.withOpacity(0.6)),
+                    ),
+                  ],
                 ),
               ),
+            const SizedBox(height: 12),
+            _buildDetailRow(Icons.calendar_today, event.date),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
-                const SizedBox(width: 8),
-                Text(
-                  event.date,
-                  style: const TextStyle(fontSize: 14, color: Colors.grey),
-                ),
-              ],
-            ),
+            _buildDetailRow(Icons.access_time, event.time),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(Icons.access_time, size: 16, color: Colors.grey),
-                const SizedBox(width: 8),
-                Text(
-                  event.time,
-                  style: const TextStyle(fontSize: 14, color: Colors.grey),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(Icons.location_on, size: 16, color: Colors.grey),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    event.location,
-                    style: const TextStyle(fontSize: 14, color: Colors.grey),
-                  ),
-                ),
-              ],
-            ),
+            _buildDetailRow(Icons.location_on, event.location,
+                isMultiline: true),
             if (event.description != null && event.description!.isNotEmpty)
-              Column(
-                children: [
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      const Icon(Icons.description,
-                          size: 16, color: Colors.grey),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          event.description!,
-                          style:
-                              const TextStyle(fontSize: 14, color: Colors.grey),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: _buildDetailRow(Icons.description, event.description!,
+                    isMultiline: true),
               ),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(Icons.person, size: 16, color: Colors.grey),
-                const SizedBox(width: 8),
-                Text(
-                  'Created by: ${event.createdBy}',
-                  style: const TextStyle(fontSize: 14, color: Colors.grey),
-                ),
-              ],
-            ),
+            _buildDetailRow(Icons.person, 'Created by: ${event.createdBy}'),
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: () => Navigator.pop(context),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.black,
-                  foregroundColor: Colors.white,
+                  backgroundColor: AppTheme.saffron,
+                  foregroundColor: AppTheme.white,
                 ),
                 child: const Text('Close'),
               ),
@@ -490,24 +674,50 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
+  Widget _buildDetailRow(IconData icon, String text,
+      {bool isMultiline = false}) {
+    return Row(
+      crossAxisAlignment:
+          isMultiline ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+      children: [
+        Icon(icon, size: 16, color: AppTheme.charcoal.withOpacity(0.5)),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 13,
+              color: AppTheme.charcoal.withOpacity(0.7),
+            ),
+            maxLines: isMultiline ? 3 : 1,
+            overflow:
+                isMultiline ? TextOverflow.ellipsis : TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
-        backgroundColor: Colors.white,
-        body: Center(child: CircularProgressIndicator()),
+      return Scaffold(
+        backgroundColor: AppTheme.sand,
+        body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.sand,
       appBar: AppBar(
-        title: const Text('Map',
-            style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.white,
+        title: const Text(
+          'Map',
+          style: TextStyle(color: AppTheme.white, fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: AppTheme.navy,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          icon: const Icon(Icons.arrow_back, color: AppTheme.white),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
@@ -516,11 +726,11 @@ class _MapScreenState extends State<MapScreen> {
               onPressed: _clearAllFilters,
               child: const Text(
                 'Clear All',
-                style: TextStyle(color: Colors.black),
+                style: TextStyle(color: AppTheme.gold),
               ),
             ),
           IconButton(
-            icon: const Icon(Icons.info_outline, color: Colors.black),
+            icon: const Icon(Icons.info_outline, color: AppTheme.white),
             onPressed: _showLegend,
           ),
         ],
@@ -539,15 +749,16 @@ class _MapScreenState extends State<MapScreen> {
                   label: const Text('All'),
                   selected: _selectedStatus == null,
                   onSelected: (_) => _applyStatusFilter(null),
-                  backgroundColor: Colors.white,
-                  selectedColor: Colors.black,
+                  backgroundColor: AppTheme.white,
+                  selectedColor: AppTheme.saffron,
                   labelStyle: TextStyle(
-                    color:
-                        _selectedStatus == null ? Colors.white : Colors.black,
+                    color: _selectedStatus == null
+                        ? AppTheme.white
+                        : AppTheme.charcoal,
                     fontWeight: FontWeight.w500,
                   ),
                   side: BorderSide(
-                    color: Colors.black,
+                    color: AppTheme.sand,
                     width: _selectedStatus == null ? 0 : 1,
                   ),
                 ),
@@ -556,16 +767,16 @@ class _MapScreenState extends State<MapScreen> {
                   label: const Text('Active'),
                   selected: _selectedStatus == 'active',
                   onSelected: (_) => _applyStatusFilter('active'),
-                  backgroundColor: Colors.white,
-                  selectedColor: Colors.black,
+                  backgroundColor: AppTheme.white,
+                  selectedColor: AppTheme.saffron,
                   labelStyle: TextStyle(
                     color: _selectedStatus == 'active'
-                        ? Colors.white
-                        : Colors.black,
+                        ? AppTheme.white
+                        : AppTheme.charcoal,
                     fontWeight: FontWeight.w500,
                   ),
                   side: BorderSide(
-                    color: Colors.black,
+                    color: AppTheme.sand,
                     width: _selectedStatus == 'active' ? 0 : 1,
                   ),
                 ),
@@ -574,16 +785,16 @@ class _MapScreenState extends State<MapScreen> {
                   label: const Text('Today'),
                   selected: _selectedStatus == 'today',
                   onSelected: (_) => _applyStatusFilter('today'),
-                  backgroundColor: Colors.white,
-                  selectedColor: Colors.black,
+                  backgroundColor: AppTheme.white,
+                  selectedColor: AppTheme.saffron,
                   labelStyle: TextStyle(
                     color: _selectedStatus == 'today'
-                        ? Colors.white
-                        : Colors.black,
+                        ? AppTheme.white
+                        : AppTheme.charcoal,
                     fontWeight: FontWeight.w500,
                   ),
                   side: BorderSide(
-                    color: Colors.black,
+                    color: AppTheme.sand,
                     width: _selectedStatus == 'today' ? 0 : 1,
                   ),
                 ),
@@ -592,16 +803,16 @@ class _MapScreenState extends State<MapScreen> {
                   label: const Text('Tomorrow'),
                   selected: _selectedStatus == 'tomorrow',
                   onSelected: (_) => _applyStatusFilter('tomorrow'),
-                  backgroundColor: Colors.white,
-                  selectedColor: Colors.black,
+                  backgroundColor: AppTheme.white,
+                  selectedColor: AppTheme.saffron,
                   labelStyle: TextStyle(
                     color: _selectedStatus == 'tomorrow'
-                        ? Colors.white
-                        : Colors.black,
+                        ? AppTheme.white
+                        : AppTheme.charcoal,
                     fontWeight: FontWeight.w500,
                   ),
                   side: BorderSide(
-                    color: Colors.black,
+                    color: AppTheme.sand,
                     width: _selectedStatus == 'tomorrow' ? 0 : 1,
                   ),
                 ),
@@ -620,15 +831,16 @@ class _MapScreenState extends State<MapScreen> {
                   label: const Text('All'),
                   selected: _selectedCategory == null,
                   onSelected: (_) => _applyCategoryFilter(null),
-                  backgroundColor: Colors.white,
-                  selectedColor: Colors.black,
+                  backgroundColor: AppTheme.white,
+                  selectedColor: AppTheme.saffron,
                   labelStyle: TextStyle(
-                    color:
-                        _selectedCategory == null ? Colors.white : Colors.black,
+                    color: _selectedCategory == null
+                        ? AppTheme.white
+                        : AppTheme.charcoal,
                     fontWeight: FontWeight.w500,
                   ),
                   side: BorderSide(
-                    color: Colors.black,
+                    color: AppTheme.sand,
                     width: _selectedCategory == null ? 0 : 1,
                   ),
                 ),
@@ -650,16 +862,16 @@ class _MapScreenState extends State<MapScreen> {
                       ),
                       selected: _selectedCategory == category,
                       onSelected: (_) => _applyCategoryFilter(category),
-                      backgroundColor: Colors.white,
-                      selectedColor: Colors.black,
+                      backgroundColor: AppTheme.white,
+                      selectedColor: AppTheme.saffron,
                       labelStyle: TextStyle(
                         color: _selectedCategory == category
-                            ? Colors.white
-                            : Colors.black,
+                            ? AppTheme.white
+                            : AppTheme.charcoal,
                         fontWeight: FontWeight.w500,
                       ),
                       side: BorderSide(
-                        color: Colors.black,
+                        color: AppTheme.sand,
                         width: _selectedCategory == category ? 0 : 1,
                       ),
                     ),
@@ -691,48 +903,49 @@ class _MapScreenState extends State<MapScreen> {
                       urlTemplate: AppConstants.mapTileUrl,
                       userAgentPackageName: 'com.example.vesak_go',
                     ),
+                    // User location marker
                     if (_currentLocation != null)
                       MarkerLayer(
                         markers: [
                           Marker(
-                            width: 30,
-                            height: 30,
+                            width: 44,
+                            height: 44,
                             point: _currentLocation!,
-                            child: const PulseDot(
-                              size: 15,
-                              color: Colors.blue,
-                              duration: 2,
-                            ),
-                          ),
-                        ],
-                      ),
-                    if (_filteredEvents.isNotEmpty)
-                      MarkerLayer(
-                        markers: _filteredEvents.map((event) {
-                          final emojiSize = _getEmojiSize();
-
-                          return Marker(
-                            width: emojiSize + 6,
-                            height: emojiSize + 6,
-                            point: LatLng(event.latitude, event.longitude),
-                            child: GestureDetector(
-                              onTap: () => _showEventDetails(event),
+                            child: SizedBox(
+                              width: 44,
+                              height: 44,
                               child: Center(
-                                child: Text(
-                                  event.getMarkerIcon(),
-                                  style: TextStyle(
-                                    fontSize: emojiSize,
-                                    shadows: [
-                                      Shadow(
-                                        color: Colors.black.withOpacity(0.3),
-                                        blurRadius: 2,
-                                        offset: const Offset(0, 1),
+                                child: Container(
+                                  width: 16,
+                                  height: 16,
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                        color: AppTheme.white, width: 2),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.blue.withOpacity(0.5),
+                                        blurRadius: 8,
+                                        spreadRadius: 2,
                                       ),
                                     ],
                                   ),
                                 ),
                               ),
                             ),
+                          ),
+                        ],
+                      ),
+                    // Event markers with dynamic zoom-based styling
+                    if (_filteredEvents.isNotEmpty)
+                      MarkerLayer(
+                        markers: _filteredEvents.map((event) {
+                          return Marker(
+                            width: 48,
+                            height: 48,
+                            point: LatLng(event.latitude, event.longitude),
+                            child: _buildEventMarker(event, _currentZoom),
                           );
                         }).toList(),
                       ),
@@ -742,11 +955,11 @@ class _MapScreenState extends State<MapScreen> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(Icons.event_busy,
-                                size: 48, color: Colors.grey),
+                                size: 48, color: AppTheme.charcoal),
                             SizedBox(height: 16),
                             Text(
                               'No events to display',
-                              style: TextStyle(color: Colors.grey),
+                              style: TextStyle(color: AppTheme.charcoal),
                             ),
                           ],
                         ),
@@ -762,8 +975,8 @@ class _MapScreenState extends State<MapScreen> {
                         heroTag: 'zoomIn',
                         onPressed: _zoomIn,
                         mini: true,
-                        backgroundColor: Colors.black,
-                        foregroundColor: Colors.white,
+                        backgroundColor: AppTheme.saffron,
+                        foregroundColor: AppTheme.white,
                         child: const Icon(Icons.add),
                       ),
                       const SizedBox(height: 12),
@@ -771,8 +984,8 @@ class _MapScreenState extends State<MapScreen> {
                         heroTag: 'zoomOut',
                         onPressed: _zoomOut,
                         mini: true,
-                        backgroundColor: Colors.black,
-                        foregroundColor: Colors.white,
+                        backgroundColor: AppTheme.saffron,
+                        foregroundColor: AppTheme.white,
                         child: const Icon(Icons.remove),
                       ),
                       const SizedBox(height: 12),
@@ -780,8 +993,8 @@ class _MapScreenState extends State<MapScreen> {
                         heroTag: 'center',
                         onPressed: _centerOnUser,
                         mini: true,
-                        backgroundColor: Colors.black,
-                        foregroundColor: Colors.white,
+                        backgroundColor: AppTheme.saffron,
+                        foregroundColor: AppTheme.white,
                         child: const Icon(Icons.my_location),
                       ),
                     ],

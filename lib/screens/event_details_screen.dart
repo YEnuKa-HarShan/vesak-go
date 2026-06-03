@@ -6,6 +6,7 @@ import '../services/supabase_service.dart';
 import '../services/session_service.dart';
 import '../constants.dart';
 import '../theme/app_theme.dart';
+import '../widgets/event_image.dart';
 
 class EventDetailsScreen extends StatefulWidget {
   final EventModel event;
@@ -94,7 +95,6 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     final categoryColor = AppConstants.getCategoryColor(widget.event.category);
-    final icon = widget.event.getMarkerIcon();
 
     return Scaffold(
       backgroundColor: AppTheme.sand,
@@ -129,44 +129,11 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              height: 200,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [categoryColor, categoryColor.withOpacity(0.7)],
-                ),
-              ),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Text(
-                    icon,
-                    style: const TextStyle(fontSize: 80),
-                  ),
-                  Positioned(
-                    bottom: 16,
-                    right: 16,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.6),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        widget.event.category,
-                        style: const TextStyle(
-                          color: AppTheme.white,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+            EventImage(
+              imageUrl: widget.event.imageUrl,
+              category: widget.event.category,
+              height: 250,
+              isFullScreen: false,
             ),
             Padding(
               padding: const EdgeInsets.all(20),

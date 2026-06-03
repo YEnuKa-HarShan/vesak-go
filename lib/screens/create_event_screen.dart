@@ -1,12 +1,15 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:geolocator/geolocator.dart';
 import '../services/supabase_service.dart';
 import '../services/location_service.dart';
 import '../services/session_service.dart';
+import '../services/image_service.dart';
 import '../models/event_model.dart';
 import '../constants.dart';
 import '../theme/app_theme.dart';
+import '../widgets/image_picker_button.dart';
 
 class CreateEventScreen extends StatefulWidget {
   final String userId;
@@ -28,6 +31,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   final SupabaseService _supabaseService = SupabaseService();
   final LocationService _locationService = LocationService();
   final SessionService _sessionService = SessionService();
+  final ImageService _imageService = ImageService();
 
   String? _selectedCategory;
   String? _selectedFoodType;
@@ -37,6 +41,9 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   TimeOfDay? _selectedTime;
   final TextEditingController _locationController = TextEditingController();
   final TextEditingController _contactController = TextEditingController();
+  File? _selectedImage;
+  String? _existingImageUrl;
+  String? _existingImagePublicId;
 
   bool _isLoading = false;
   bool _isGettingLocation = false;
@@ -61,6 +68,8 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
     _titleController.text = event.title;
     _descriptionController.text = event.description ?? '';
     _locationController.text = event.location;
+    _existingImageUrl = event.imageUrl;
+    _existingImagePublicId = event.imagePublicId;
 
     try {
       _selectedDate = DateTime.parse(event.date);
@@ -217,6 +226,22 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
     final dateString = DateFormat('yyyy-MM-dd').format(_selectedDate!);
     final timeString = _selectedTime!.format(context);
 
+    String imageUrl = _existingImageUrl ?? '';
+    String imagePublicId = _existingImagePublicId ?? '';
+
+    // Upload new image if selected
+    if (_selectedImage != null) {
+      final eventId = _isEditMode
+          ? widget.editEvent!.id
+          : DateTime.now().millisecondsSinceEpoch.toString();
+      final uploadedUrl = await _imageService.updateImage(
+          _selectedImage!, eventId, imagePublicId);
+      if (uploadedUrl != null) {
+        imageUrl = uploadedUrl;
+        imagePublicId = uploadedUrl.split('/event-images/').last;
+      }
+    }
+
     bool success;
 
     if (_isEditMode) {
@@ -233,8 +258,11 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
         latitude: latitude,
         longitude: longitude,
         foodType: _selectedCategory == 'දන්සල' ? _selectedFoodType! : 'none',
+        imageUrl: imageUrl,
+        imagePublicId: imagePublicId,
       );
     } else {
+      final tempEventId = DateTime.now().millisecondsSinceEpoch.toString();
       success = await _supabaseService.createEvent(
         category: _selectedCategory!,
         title: _titleController.text,
@@ -249,6 +277,8 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
         latitude: latitude,
         longitude: longitude,
         foodType: _selectedCategory == 'දන්සල' ? _selectedFoodType! : 'none',
+        imageUrl: imageUrl,
+        imagePublicId: imagePublicId,
       );
     }
 
@@ -304,39 +334,39 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
           children: [
             const SizedBox(height: 20),
             Center(
-              child: Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: AppTheme.gold.withOpacity(0.1),
-                  shape: BoxShape.circle,
+              child: ImagePickerButton(
+                selectedImage: _selectedImage,
+                onImagePicked: (file) {
+                  setState(() {
+                    _selectedImage = file;
+                  });
+                },
+                onRemoveImage: () {
+                  setState(() {
+                    _selectedImage = null;
+                    _existingImageUrl = null;
+                    _existingImagePublicId = null;
+                  });
+                },
+                size: 120,
+              ),
+            ),
+            if (_existingImageUrl != null &&
+                _existingImageUrl!.isNotEmpty &&
+                _selectedImage == null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Center(
+                  child: Text(
+                    'Current image will be kept',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppTheme.forestGreen,
+                    ),
+                  ),
                 ),
-                child: Icon(
-                  _isEditMode ? Icons.edit : Icons.event_available,
-                  size: 60,
-                  color: AppTheme.gold,
-                ),
               ),
-            ),
-            const SizedBox(height: 30),
-            Text(
-              _isEditMode ? 'Edit Event Details' : 'Create New Event',
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.charcoal,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _isEditMode
-                  ? 'Update your event information'
-                  : 'Share your Vesak celebration with the community',
-              style: TextStyle(
-                fontSize: 14,
-                color: AppTheme.charcoal.withOpacity(0.6),
-              ),
-            ),
-            const SizedBox(height: 30),
+            const SizedBox(height: 20),
             DropdownButtonFormField<String>(
               value: _selectedCategory,
               decoration: InputDecoration(

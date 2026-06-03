@@ -185,6 +185,8 @@ class SupabaseService {
     required double latitude,
     required double longitude,
     required String foodType,
+    required String imageUrl,
+    required String imagePublicId,
     String? description,
   }) async {
     try {
@@ -201,6 +203,8 @@ class SupabaseService {
         'latitude': latitude,
         'longitude': longitude,
         'food_type': foodType,
+        'image_url': imageUrl,
+        'image_public_id': imagePublicId,
       };
 
       await _supabase.from('events').insert(newEvent);
@@ -247,10 +251,6 @@ class SupabaseService {
     }
   }
 
-  Future<UserModel?> addXpAndUpdateUser(String userId, int xpAmount) async {
-    return await _addXpAndReturnUser(userId, xpAmount, 'manual');
-  }
-
   Future<bool> updateEvent({
     required String eventId,
     required String category,
@@ -262,6 +262,8 @@ class SupabaseService {
     required double latitude,
     required double longitude,
     required String foodType,
+    required String imageUrl,
+    required String imagePublicId,
   }) async {
     try {
       final updatedEvent = {
@@ -274,6 +276,8 @@ class SupabaseService {
         'latitude': latitude,
         'longitude': longitude,
         'food_type': foodType,
+        'image_url': imageUrl,
+        'image_public_id': imagePublicId,
       };
 
       await _supabase.from('events').update(updatedEvent).eq('id', eventId);
@@ -287,6 +291,25 @@ class SupabaseService {
 
   Future<bool> deleteEvent(String eventId) async {
     try {
+      // First get the event to delete its image
+      final event = await _supabase
+          .from('events')
+          .select('image_public_id')
+          .eq('id', eventId)
+          .maybeSingle();
+
+      if (event != null &&
+          event['image_public_id'] != null &&
+          event['image_public_id'].toString().isNotEmpty) {
+        try {
+          await _supabase.storage
+              .from('event-images')
+              .remove([event['image_public_id']]);
+        } catch (e) {
+          print('Error deleting image from storage: $e');
+        }
+      }
+
       await _supabase.from('events').delete().eq('id', eventId);
 
       return true;
@@ -306,23 +329,7 @@ class SupabaseService {
       List<EventModel> events = [];
       for (var json in response) {
         try {
-          events.add(EventModel(
-            id: json['id'] ?? '',
-            category: json['category'] ?? 'තොරණ',
-            title: json['title'] ?? 'Untitled',
-            description: json['description'],
-            date: json['date'] ?? '',
-            time: json['time'] ?? '',
-            location: json['location'] ?? '',
-            userId: json['user_id'] ?? '',
-            createdBy: json['created_by'] ?? 'Unknown',
-            createdAt: json['created_at'] != null
-                ? DateTime.parse(json['created_at'])
-                : DateTime.now(),
-            latitude: (json['latitude'] as num?)?.toDouble() ?? 7.8731,
-            longitude: (json['longitude'] as num?)?.toDouble() ?? 80.7718,
-            foodType: json['food_type'] ?? 'none',
-          ));
+          events.add(EventModel.fromJson(json));
         } catch (e) {
           print('Error parsing event: $e');
         }
@@ -339,7 +346,7 @@ class SupabaseService {
       final response = await _supabase
           .from('events')
           .select(
-              'id, category, title, date, time, location, latitude, longitude, created_by, food_type')
+              'id, category, title, date, time, location, latitude, longitude, created_by, food_type, image_url')
           .order('created_at', ascending: false);
 
       List<EventModel> events = [];
@@ -366,6 +373,8 @@ class SupabaseService {
             latitude: latitude,
             longitude: longitude,
             foodType: json['food_type'] ?? 'none',
+            imageUrl: json['image_url'] ?? '',
+            imagePublicId: '',
           ));
         } catch (e) {
           print('Error parsing map event: $e');
@@ -389,23 +398,7 @@ class SupabaseService {
       List<EventModel> events = [];
       for (var json in response) {
         try {
-          events.add(EventModel(
-            id: json['id'] ?? '',
-            category: json['category'] ?? 'තොරණ',
-            title: json['title'] ?? 'Untitled',
-            description: json['description'],
-            date: json['date'] ?? '',
-            time: json['time'] ?? '',
-            location: json['location'] ?? '',
-            userId: json['user_id'] ?? '',
-            createdBy: json['created_by'] ?? 'Unknown',
-            createdAt: json['created_at'] != null
-                ? DateTime.parse(json['created_at'])
-                : DateTime.now(),
-            latitude: (json['latitude'] as num?)?.toDouble() ?? 7.8731,
-            longitude: (json['longitude'] as num?)?.toDouble() ?? 80.7718,
-            foodType: json['food_type'] ?? 'none',
-          ));
+          events.add(EventModel.fromJson(json));
         } catch (e) {
           print('Error parsing my event: $e');
         }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:table_calendar/table_calendar.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../services/supabase_service.dart';
 import '../services/session_service.dart';
 import '../models/event_model.dart';
@@ -758,80 +759,146 @@ class _EventsScreenState extends State<EventsScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Image Header
             Container(
-              padding: const EdgeInsets.all(12),
+              height: 140,
               decoration: BoxDecoration(
-                color: categoryColor.withOpacity(0.1),
                 borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(16),
                   topRight: Radius.circular(16),
                 ),
+                image: event.hasImage
+                    ? DecorationImage(
+                        image: CachedNetworkImageProvider(event.imageUrl),
+                        fit: BoxFit.cover,
+                      )
+                    : null,
               ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      color: categoryColor,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          day,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.white,
-                          ),
+              child: event.hasImage
+                  ? Container(
+                      decoration: BoxDecoration(
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(16),
+                          topRight: Radius.circular(16),
                         ),
-                        Text(
-                          month,
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: AppTheme.white,
-                          ),
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withOpacity(0.5),
+                          ],
                         ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          event.title,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.charcoal,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Text(
+                              event.title,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.white,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.2),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        displayIcon,
+                                        style: const TextStyle(fontSize: 10),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        displayName,
+                                        style: const TextStyle(
+                                          fontSize: 10,
+                                          color: AppTheme.white,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                if (isActive)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color:
+                                          AppTheme.forestGreen.withOpacity(0.8),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: const Text(
+                                      'Active',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: AppTheme.white,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 4),
-                        Row(
+                      ),
+                    )
+                  : Container(
+                      decoration: BoxDecoration(
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(16),
+                          topRight: Radius.circular(16),
+                        ),
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            categoryColor,
+                            categoryColor.withOpacity(0.7)
+                          ],
+                        ),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 2),
+                              width: 50,
+                              height: 50,
                               decoration: BoxDecoration(
-                                color: categoryColor.withOpacity(0.2),
+                                color: AppTheme.white,
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Text(
-                                    displayIcon,
-                                    style: const TextStyle(fontSize: 10),
+                                    day,
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: categoryColor,
+                                    ),
                                   ),
-                                  const SizedBox(width: 4),
                                   Text(
-                                    displayName,
+                                    month,
                                     style: TextStyle(
                                       fontSize: 10,
                                       color: categoryColor,
@@ -840,80 +907,133 @@ class _EventsScreenState extends State<EventsScreen>
                                 ],
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            if (isActive)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: AppTheme.forestGreen.withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: const Text(
-                                  'Active',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: AppTheme.forestGreen,
-                                    fontWeight: FontWeight.w500,
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    event.title,
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppTheme.white,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                ),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withOpacity(0.2),
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              displayIcon,
+                                              style:
+                                                  const TextStyle(fontSize: 10),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              displayName,
+                                              style: const TextStyle(
+                                                fontSize: 10,
+                                                color: AppTheme.white,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      if (isActive)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: AppTheme.forestGreen
+                                                .withOpacity(0.8),
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                          ),
+                                          child: const Text(
+                                            'Active',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              color: AppTheme.white,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (isOwner)
+                              PopupMenuButton<String>(
+                                icon: Icon(Icons.more_vert,
+                                    color: AppTheme.white),
+                                onSelected: (value) async {
+                                  if (value == 'edit') {
+                                    await _editEvent(event);
+                                  } else if (value == 'delete') {
+                                    await _deleteEvent(event.id);
+                                  } else if (value == 'share') {
+                                    _shareEvent(event);
+                                  }
+                                },
+                                itemBuilder: (context) => [
+                                  const PopupMenuItem(
+                                    value: 'edit',
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.edit,
+                                            size: 20, color: AppTheme.saffron),
+                                        SizedBox(width: 8),
+                                        Text('Edit'),
+                                      ],
+                                    ),
+                                  ),
+                                  const PopupMenuItem(
+                                    value: 'share',
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.share,
+                                            size: 20, color: AppTheme.navy),
+                                        SizedBox(width: 8),
+                                        Text('Share'),
+                                      ],
+                                    ),
+                                  ),
+                                  const PopupMenuItem(
+                                    value: 'delete',
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.delete,
+                                            size: 20, color: AppTheme.maroon),
+                                        SizedBox(width: 8),
+                                        Text('Delete',
+                                            style: TextStyle(
+                                                color: AppTheme.maroon)),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                               ),
                           ],
                         ),
-                      ],
+                      ),
                     ),
-                  ),
-                  if (isOwner)
-                    PopupMenuButton<String>(
-                      icon: Icon(Icons.more_vert, color: AppTheme.charcoal),
-                      onSelected: (value) async {
-                        if (value == 'edit') {
-                          await _editEvent(event);
-                        } else if (value == 'delete') {
-                          await _deleteEvent(event.id);
-                        } else if (value == 'share') {
-                          _shareEvent(event);
-                        }
-                      },
-                      itemBuilder: (context) => [
-                        const PopupMenuItem(
-                          value: 'edit',
-                          child: Row(
-                            children: [
-                              Icon(Icons.edit,
-                                  size: 20, color: AppTheme.saffron),
-                              SizedBox(width: 8),
-                              Text('Edit'),
-                            ],
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'share',
-                          child: Row(
-                            children: [
-                              Icon(Icons.share, size: 20, color: AppTheme.navy),
-                              SizedBox(width: 8),
-                              Text('Share'),
-                            ],
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'delete',
-                          child: Row(
-                            children: [
-                              Icon(Icons.delete,
-                                  size: 20, color: AppTheme.maroon),
-                              SizedBox(width: 8),
-                              Text('Delete',
-                                  style: TextStyle(color: AppTheme.maroon)),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                ],
-              ),
             ),
+            // Info Section
             Padding(
               padding: const EdgeInsets.all(12),
               child: Column(

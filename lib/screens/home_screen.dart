@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'login_screen.dart';
 import 'create_event_screen.dart';
 import 'events_screen.dart';
@@ -89,7 +90,7 @@ class _HomeScreenState extends State<HomeScreen> {
             return false;
           }
         })
-        .take(3)
+        .take(5)
         .toList();
 
     setState(() {
@@ -702,8 +703,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => const EventsScreen(initialTab: 2),
-                  ),
+                      builder: (context) => const EventsScreen(initialTab: 2)),
                 );
               },
               color: AppTheme.gold.withOpacity(0.2),
@@ -803,7 +803,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildFeaturedEventsCarousel() {
     return SizedBox(
-      height: 180,
+      height: 220,
       child: PageView.builder(
         controller: _carouselController,
         onPageChanged: (index) {
@@ -811,119 +811,210 @@ class _HomeScreenState extends State<HomeScreen> {
             _currentCarouselPage = index;
           });
         },
-        itemCount: _upcomingEvents.length > 3 ? 3 : _upcomingEvents.length,
+        itemCount: _upcomingEvents.length,
         itemBuilder: (context, index) {
           final event = _upcomingEvents[index];
+          final categoryColor = AppConstants.getCategoryColor(event.category);
+          final icon = event.getMarkerIcon();
+
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Container(
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [AppTheme.navy, AppTheme.maroon],
-                ),
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.charcoal.withOpacity(0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
-              child: Stack(
-                children: [
-                  Positioned(
-                    right: 16,
-                    top: 16,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: AppTheme.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            event.getMarkerIcon(),
-                            style: const TextStyle(fontSize: 12),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: Stack(
+                  children: [
+                    // Background Image or Gradient
+                    if (event.hasImage)
+                      CachedNetworkImage(
+                        imageUrl: event.imageUrl,
+                        width: double.infinity,
+                        height: double.infinity,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                categoryColor,
+                                categoryColor.withOpacity(0.7)
+                              ],
+                            ),
                           ),
-                          const SizedBox(width: 4),
+                        ),
+                        errorWidget: (context, url, error) => Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                categoryColor,
+                                categoryColor.withOpacity(0.7)
+                              ],
+                            ),
+                          ),
+                        ),
+                      )
+                    else
+                      Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              categoryColor,
+                              categoryColor.withOpacity(0.7)
+                            ],
+                          ),
+                        ),
+                      ),
+
+                    // Dark Overlay for better text visibility
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withOpacity(0.7),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // Content
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          // Category Chip
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  icon,
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  event.category,
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: AppTheme.white,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          // Title
                           Text(
-                            event.category,
+                            event.title,
                             style: const TextStyle(
-                              fontSize: 10,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
                               color: AppTheme.white,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 8),
+                          // Date and Time
+                          Row(
+                            children: [
+                              const Icon(Icons.calendar_today,
+                                  size: 14, color: AppTheme.white),
+                              const SizedBox(width: 6),
+                              Text(
+                                event.date,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppTheme.white.withOpacity(0.9),
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              const Icon(Icons.access_time,
+                                  size: 14, color: AppTheme.white),
+                              const SizedBox(width: 6),
+                              Text(
+                                event.time,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppTheme.white.withOpacity(0.9),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          // Location
+                          Row(
+                            children: [
+                              const Icon(Icons.location_on,
+                                  size: 14, color: AppTheme.white),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  event.location,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: AppTheme.white.withOpacity(0.8),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          // View Details Button
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: AppTheme.gold,
+                              borderRadius: BorderRadius.circular(25),
+                            ),
+                            child: GestureDetector(
+                              onTap: () {
+                                _showEventDetails(event);
+                              },
+                              child: const Text(
+                                'View Details',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.charcoal,
+                                ),
+                              ),
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          event.title,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.white,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            const Icon(Icons.calendar_today,
-                                size: 14, color: AppTheme.white),
-                            const SizedBox(width: 4),
-                            Text(
-                              event.date,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: AppTheme.white.withOpacity(0.8),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            const Icon(Icons.access_time,
-                                size: 14, color: AppTheme.white),
-                            const SizedBox(width: 4),
-                            Text(
-                              event.time,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: AppTheme.white.withOpacity(0.8),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        GestureDetector(
-                          onTap: () {
-                            _showEventDetails(event);
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: AppTheme.gold,
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: const Text(
-                              'View Details',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
-                                color: AppTheme.charcoal,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           );
@@ -1011,6 +1102,9 @@ class _HomeScreenState extends State<HomeScreen> {
       itemCount: _upcomingEvents.length > 3 ? 3 : _upcomingEvents.length,
       itemBuilder: (context, index) {
         final event = _upcomingEvents[index];
+        final categoryColor = AppConstants.getCategoryColor(event.category);
+        final icon = event.getMarkerIcon();
+
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.all(12),
@@ -1032,13 +1126,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 width: 50,
                 height: 50,
                 decoration: BoxDecoration(
-                  color: AppConstants.getCategoryColor(event.category)
-                      .withOpacity(0.1),
+                  color: categoryColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Center(
                   child: Text(
-                    event.getMarkerIcon(),
+                    icon,
                     style: const TextStyle(fontSize: 24),
                   ),
                 ),
@@ -1199,6 +1292,10 @@ class _HomeScreenState extends State<HomeScreen> {
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.saffron,
+                  foregroundColor: AppTheme.white,
+                ),
                 child: const Text('Close'),
               ),
             ),

@@ -1,4 +1,4 @@
-import 'package:vesak_go/constants.dart';
+import '../constants.dart';
 
 class EventModel {
   final String id;
@@ -14,6 +14,8 @@ class EventModel {
   final double latitude;
   final double longitude;
   final String foodType;
+  final String imageUrl;
+  final String imagePublicId;
 
   EventModel({
     required this.id,
@@ -29,6 +31,8 @@ class EventModel {
     required this.latitude,
     required this.longitude,
     required this.foodType,
+    required this.imageUrl,
+    required this.imagePublicId,
   });
 
   Map<String, dynamic> toJson() {
@@ -46,6 +50,8 @@ class EventModel {
       'latitude': latitude,
       'longitude': longitude,
       'food_type': foodType,
+      'image_url': imageUrl,
+      'image_public_id': imagePublicId,
     };
   }
 
@@ -64,6 +70,8 @@ class EventModel {
       latitude: (json['latitude'] as num).toDouble(),
       longitude: (json['longitude'] as num).toDouble(),
       foodType: json['food_type'] ?? 'none',
+      imageUrl: json['image_url'] ?? '',
+      imagePublicId: json['image_public_id'] ?? '',
     );
   }
 
@@ -84,4 +92,6 @@ class EventModel {
     }
     return category;
   }
+
+  bool get hasImage => imageUrl.isNotEmpty;
 }
