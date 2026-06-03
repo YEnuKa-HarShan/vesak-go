@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 import '../services/supabase_service.dart';
 import '../services/session_service.dart';
@@ -372,6 +373,9 @@ class _EventsScreenState extends State<EventsScreen>
   }
 
   Widget _buildEventCard(Map<String, dynamic> event, {required bool isOwner}) {
+    final categoryColor =
+        AppConstants.getCategoryColor(event['category'] ?? 'තොරණ');
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
@@ -383,16 +387,23 @@ class _EventsScreenState extends State<EventsScreen>
         children: [
           Container(
             padding: const EdgeInsets.all(16),
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               color: Colors.black,
-              borderRadius: BorderRadius.only(
+              borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(11),
                 topRight: Radius.circular(11),
               ),
             ),
             child: Row(
               children: [
-                const Icon(Icons.event, color: Colors.white, size: 20),
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: categoryColor,
+                    shape: BoxShape.circle,
+                  ),
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Column(
@@ -708,6 +719,25 @@ class _EditEventScreenState extends State<EditEventScreen> {
     final dateString = DateFormat('yyyy-MM-dd').format(_selectedDate!);
     final timeString = _selectedTime!.format(context);
 
+    // Get coordinates (keep existing or fetch new)
+    double latitude = 7.8731;
+    double longitude = 80.7718;
+
+    try {
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission != LocationPermission.denied &&
+          permission != LocationPermission.deniedForever) {
+        Position position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+          timeLimit: const Duration(seconds: 10),
+        );
+        latitude = position.latitude;
+        longitude = position.longitude;
+      }
+    } catch (e) {
+      print('Could not get coordinates: $e');
+    }
+
     final success = await _supabaseService.updateEvent(
       eventId: widget.eventId,
       category: _selectedCategory,
@@ -718,6 +748,8 @@ class _EditEventScreenState extends State<EditEventScreen> {
       date: dateString,
       time: timeString,
       location: _locationController.text,
+      latitude: latitude,
+      longitude: longitude,
     );
 
     setState(() {

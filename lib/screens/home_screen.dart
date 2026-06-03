@@ -3,6 +3,7 @@ import 'login_screen.dart';
 import 'create_event_screen.dart';
 import 'events_screen.dart';
 import 'profile_screen.dart';
+import 'map_screen.dart';
 import '../services/supabase_service.dart';
 import '../services/session_service.dart';
 import '../constants.dart';
@@ -299,6 +300,17 @@ class _HomeScreenState extends State<HomeScreen> {
             Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const EventsScreen()),
+            );
+          },
+        ),
+        const SizedBox(height: 10),
+        _buildActionButton(
+          title: 'Map',
+          icon: Icons.map,
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const MapScreen()),
             );
           },
         ),

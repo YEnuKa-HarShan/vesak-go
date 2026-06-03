@@ -181,6 +181,8 @@ class SupabaseService {
     required String location,
     required String userId,
     required String createdBy,
+    required double latitude,
+    required double longitude,
     String? description,
   }) async {
     try {
@@ -194,11 +196,12 @@ class SupabaseService {
         'user_id': userId,
         'created_by': createdBy,
         'created_at': DateTime.now().toIso8601String(),
+        'latitude': latitude,
+        'longitude': longitude,
       };
 
       await _supabase.from('events').insert(newEvent);
 
-      // Add XP and get updated user
       final updatedUser =
           await _addXpAndReturnUser(userId, 50, 'event_created');
 
@@ -225,7 +228,6 @@ class SupabaseService {
           'current_level': newLevel,
         }).eq('id', userId);
 
-        // Return updated user
         final updatedUser = await _supabase
             .from('users')
             .select()
@@ -255,6 +257,8 @@ class SupabaseService {
     required String date,
     required String time,
     required String location,
+    required double latitude,
+    required double longitude,
   }) async {
     try {
       final updatedEvent = {
@@ -264,6 +268,8 @@ class SupabaseService {
         'date': date,
         'time': time,
         'location': location,
+        'latitude': latitude,
+        'longitude': longitude,
       };
 
       await _supabase.from('events').update(updatedEvent).eq('id', eventId);
@@ -296,6 +302,21 @@ class SupabaseService {
       return response;
     } catch (e) {
       print('Get all events error: $e');
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getEventsForMap() async {
+    try {
+      final response = await _supabase
+          .from('events')
+          .select(
+              'id, category, title, date, time, location, latitude, longitude, created_by')
+          .order('created_at', ascending: false);
+
+      return response;
+    } catch (e) {
+      print('Get events for map error: $e');
       return [];
     }
   }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:geolocator/geolocator.dart';
 import '../services/supabase_service.dart';
 import '../services/location_service.dart';
 import '../services/session_service.dart';
@@ -138,6 +139,29 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
       _isLoading = true;
     });
 
+    // Get coordinates for the location
+    double latitude = 7.8731;
+    double longitude = 80.7718;
+
+    try {
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+
+      if (permission != LocationPermission.denied &&
+          permission != LocationPermission.deniedForever) {
+        Position position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+          timeLimit: const Duration(seconds: 10),
+        );
+        latitude = position.latitude;
+        longitude = position.longitude;
+      }
+    } catch (e) {
+      print('Could not get coordinates: $e');
+    }
+
     final dateString = DateFormat('yyyy-MM-dd').format(_selectedDate!);
     final timeString = _selectedTime!.format(context);
 
@@ -152,6 +176,8 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
       location: _locationController.text,
       userId: widget.userId,
       createdBy: widget.userFirstName,
+      latitude: latitude,
+      longitude: longitude,
     );
 
     if (success) {
