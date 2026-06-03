@@ -23,6 +23,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   final SessionService _sessionService = SessionService();
 
   String? _selectedCategory;
+  String? _selectedFoodType;
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
   DateTime? _selectedDate;
@@ -107,6 +108,14 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
       return;
     }
 
+    if (_selectedCategory == 'දන්සල' &&
+        (_selectedFoodType == null || _selectedFoodType == 'none')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select food type for Dansala')),
+      );
+      return;
+    }
+
     if (_titleController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter event title')),
@@ -139,7 +148,6 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
       _isLoading = true;
     });
 
-    // Get coordinates for the location
     double latitude = 7.8731;
     double longitude = 80.7718;
 
@@ -178,6 +186,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
       createdBy: widget.userFirstName,
       latitude: latitude,
       longitude: longitude,
+      foodType: _selectedCategory == 'දන්සල' ? _selectedFoodType! : 'none',
     );
 
     if (success) {
@@ -257,12 +266,24 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
               items: AppConstants.eventCategories.map((category) {
                 return DropdownMenuItem(
                   value: category,
-                  child: Text(category),
+                  child: Row(
+                    children: [
+                      Text(
+                        AppConstants.getCategoryIcon(category),
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(category),
+                    ],
+                  ),
                 );
               }).toList(),
               onChanged: (value) {
                 setState(() {
                   _selectedCategory = value;
+                  if (value != 'දන්සල') {
+                    _selectedFoodType = null;
+                  }
                 });
               },
               style: const TextStyle(color: Colors.black),
@@ -270,6 +291,51 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
               icon: const Icon(Icons.arrow_drop_down, color: Colors.black),
             ),
             const SizedBox(height: 20),
+            if (_selectedCategory == 'දන්සල')
+              Column(
+                children: [
+                  DropdownButtonFormField<String>(
+                    value: _selectedFoodType,
+                    decoration: InputDecoration(
+                      labelText: 'Food Type *',
+                      labelStyle: const TextStyle(color: Colors.black),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide:
+                            const BorderSide(color: Colors.black, width: 2),
+                      ),
+                    ),
+                    items: AppConstants.foodTypes.map((food) {
+                      return DropdownMenuItem(
+                        value: food['sinhala'],
+                        child: Row(
+                          children: [
+                            Text(
+                              food['emoji']!,
+                              style: const TextStyle(fontSize: 20),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(food['sinhala']!),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedFoodType = value;
+                      });
+                    },
+                    style: const TextStyle(color: Colors.black),
+                    dropdownColor: Colors.white,
+                    icon:
+                        const Icon(Icons.arrow_drop_down, color: Colors.black),
+                  ),
+                  const SizedBox(height: 20),
+                ],
+              ),
             TextField(
               controller: _titleController,
               decoration: InputDecoration(

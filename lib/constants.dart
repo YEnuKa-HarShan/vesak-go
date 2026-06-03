@@ -23,10 +23,10 @@ class AppConstants {
   };
 
   static const Map<String, String> categoryIcons = {
-    'තොරණ': '🎆',
+    'තොරණ': '🎡',
     'දන්සල': '🍛',
-    'ධර්ම දේශනාව': '📿',
-    'බැති ගී': '🎶',
+    'ධර්ම දේශනාව': '☸️',
+    'බැති ගී': '🎻',
     'කලාප': '🎭',
     'කූඩු ප්‍රදර්ශන': '🏮',
     'පෙරහැර': '🐘',
@@ -41,6 +41,25 @@ class AppConstants {
     'කූඩු ප්‍රදර්ශන': 'Kudu Pradarshana (Lantern Exhibition)',
     'පෙරහැර': 'Perahera (Procession)',
   };
+
+  static const List<Map<String, String>> foodTypes = [
+    {'sinhala': 'පාන්', 'emoji': '🍞'},
+    {'sinhala': 'මාලු පාන්', 'emoji': '🥐'},
+    {'sinhala': 'බඩ ඉරිගු', 'emoji': '🌽'},
+    {'sinhala': 'නූඩ්ලස්', 'emoji': '🍝'},
+    {'sinhala': 'අයිස්ක්‍රීම්', 'emoji': '🍦'},
+    {'sinhala': 'බෙලිමල්', 'emoji': '☕'},
+    {'sinhala': 'කිරිකෝපි', 'emoji': '☕'},
+    {'sinhala': 'බත්', 'emoji': '🍛'},
+    {'sinhala': 'කොත්තු', 'emoji': '🍛'},
+    {'sinhala': 'කොස්', 'emoji': '🍛'},
+    {'sinhala': 'සුප්', 'emoji': '🍲'},
+    {'sinhala': 'කැඳ', 'emoji': '🍲'},
+    {'sinhala': 'කඩල', 'emoji': '🫘'},
+    {'sinhala': 'මුං ඇට', 'emoji': '🫘'},
+    {'sinhala': 'කව්පි', 'emoji': '🫘'},
+    {'sinhala': 'බීම', 'emoji': '🥤'},
+  ];
 
   static const List<Map<String, dynamic>> leagues = [
     {'name': 'Unranked', 'minLevel': 0, 'maxLevel': 0, 'icon': '🌱'},
@@ -98,5 +117,14 @@ class AppConstants {
 
   static String getCategoryName(String category) {
     return categoryNames[category] ?? category;
+  }
+
+  static String getFoodTypeEmoji(String foodType) {
+    for (var food in foodTypes) {
+      if (food['sinhala'] == foodType) {
+        return food['emoji']!;
+      }
+    }
+    return '🍛';
   }
 }

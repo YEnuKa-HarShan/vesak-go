@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import '../constants.dart';
 import '../services/supabase_service.dart';
+import '../models/event_model.dart';
 import '../widgets/pulse_dot.dart';
 
 class MapScreen extends StatefulWidget {
@@ -21,8 +22,8 @@ class _MapScreenState extends State<MapScreen> {
   bool _isLoading = true;
   final MapController _mapController = MapController();
 
-  List<Map<String, dynamic>> _allEvents = [];
-  List<Map<String, dynamic>> _filteredEvents = [];
+  List<EventModel> _allEvents = [];
+  List<EventModel> _filteredEvents = [];
   String? _selectedCategory;
 
   @override
@@ -51,7 +52,7 @@ class _MapScreenState extends State<MapScreen> {
       _filteredEvents = List.from(_allEvents);
     } else {
       _filteredEvents = _allEvents
-          .where((event) => event['category'] == _selectedCategory)
+          .where((event) => event.category == _selectedCategory)
           .toList();
     }
     setState(() {});
@@ -120,148 +121,164 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  double _getMarkerSize() {
-    // Smaller markers at low zoom, larger at high zoom
-    if (_currentZoom < 12) return 20;
-    if (_currentZoom < 14) return 24;
-    if (_currentZoom < 16) return 28;
-    return 32;
-  }
-
-  double _getIconSize() {
-    if (_currentZoom < 12) return 12;
-    if (_currentZoom < 14) return 14;
-    if (_currentZoom < 16) return 16;
-    return 18;
+  double _getEmojiSize() {
+    if (_currentZoom < 12) return 18;
+    if (_currentZoom < 14) return 22;
+    if (_currentZoom < 16) return 26;
+    return 30;
   }
 
   void _showLegend() {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Map Legend',
-              style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black),
-            ),
-            const Divider(color: Colors.black, height: 24),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey[50],
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 30,
-                    height: 30,
-                    child: const PulseDot(
-                        size: 20, color: Colors.blue, duration: 2),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.5,
+        minChildSize: 0.3,
+        maxChildSize: 0.8,
+        expand: false,
+        builder: (context, scrollController) {
+          return Container(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Your Location',
-                          style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Map Legend',
+                  style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black),
+                ),
+                const Divider(color: Colors.black, height: 24),
+                Expanded(
+                  child: ListView(
+                    controller: scrollController,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[50],
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                        const Text(
-                          'Blue pulsing dot - Your current position',
-                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 30,
+                              height: 30,
+                              child: const PulseDot(
+                                  size: 20, color: Colors.blue, duration: 2),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Your Location',
+                                    style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.black),
+                                  ),
+                                  const Text(
+                                    'Blue pulsing dot - Your current position',
+                                    style: TextStyle(
+                                        fontSize: 12, color: Colors.grey),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Event Markers',
-              style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black),
-            ),
-            const SizedBox(height: 8),
-            ...AppConstants.eventCategories.map((category) {
-              final color = AppConstants.getCategoryColor(category);
-              final icon = AppConstants.getCategoryIcon(category);
-              final name = AppConstants.getCategoryName(category);
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Event Markers',
+                        style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black),
+                      ),
+                      const SizedBox(height: 8),
+                      ...AppConstants.eventCategories.map((category) {
+                        final color = AppConstants.getCategoryColor(category);
+                        final icon = AppConstants.getCategoryIcon(category);
+                        final name = AppConstants.getCategoryName(category);
 
-              return Container(
-                padding:
-                    const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                margin: const EdgeInsets.only(bottom: 8),
-                decoration: BoxDecoration(
-                  color: Colors.grey[50],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: color,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Center(
-                        child: Text(
-                          icon,
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            category,
-                            style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black),
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 8, horizontal: 12),
+                          margin: const EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[50],
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                          Text(
-                            name,
-                            style: const TextStyle(
-                                fontSize: 11, color: Colors.grey),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 24,
+                                height: 24,
+                                decoration: BoxDecoration(
+                                  color: color,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    category == 'දන්සල' ? '🍛' : icon,
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      category,
+                                      style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.black),
+                                    ),
+                                    Text(
+                                      name,
+                                      style: const TextStyle(
+                                          fontSize: 11, color: Colors.grey),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    ),
-                  ],
+                        );
+                      }),
+                      const SizedBox(height: 20),
+                    ],
+                  ),
                 ),
-              );
-            }),
-            const SizedBox(height: 20),
-          ],
-        ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
 
-  void _showEventDetails(Map<String, dynamic> event) {
+  void _showEventDetails(EventModel event) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white,
@@ -277,13 +294,13 @@ class _MapScreenState extends State<MapScreen> {
             Row(
               children: [
                 Text(
-                  AppConstants.getCategoryIcon(event['category']),
-                  style: const TextStyle(fontSize: 20),
+                  event.getMarkerIcon(),
+                  style: const TextStyle(fontSize: 24),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    event['title'] ?? 'Event',
+                    event.title,
                     style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -294,18 +311,26 @@ class _MapScreenState extends State<MapScreen> {
             ),
             const SizedBox(height: 12),
             Text(
-              event['category'] ?? 'Uncategorized',
+              event.getCategoryDisplayName(),
               style: TextStyle(
                   fontSize: 14,
-                  color: AppConstants.getCategoryColor(event['category'])),
+                  color: AppConstants.getCategoryColor(event.category)),
             ),
+            if (event.category == 'දන්සල' && event.foodType != 'none')
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  'Food: ${event.foodType}',
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ),
             const SizedBox(height: 8),
             Row(
               children: [
                 const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
                 const SizedBox(width: 8),
                 Text(
-                  event['date'] ?? 'Date not set',
+                  event.date,
                   style: const TextStyle(fontSize: 14, color: Colors.grey),
                 ),
               ],
@@ -316,7 +341,7 @@ class _MapScreenState extends State<MapScreen> {
                 const Icon(Icons.access_time, size: 16, color: Colors.grey),
                 const SizedBox(width: 8),
                 Text(
-                  event['time'] ?? 'Time not set',
+                  event.time,
                   style: const TextStyle(fontSize: 14, color: Colors.grey),
                 ),
               ],
@@ -328,19 +353,39 @@ class _MapScreenState extends State<MapScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    event['location'] ?? 'Location not set',
+                    event.location,
                     style: const TextStyle(fontSize: 14, color: Colors.grey),
                   ),
                 ),
               ],
             ),
+            if (event.description != null && event.description!.isNotEmpty)
+              Column(
+                children: [
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Icon(Icons.description,
+                          size: 16, color: Colors.grey),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          event.description!,
+                          style:
+                              const TextStyle(fontSize: 14, color: Colors.grey),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             const SizedBox(height: 8),
             Row(
               children: [
                 const Icon(Icons.person, size: 16, color: Colors.grey),
                 const SizedBox(width: 8),
                 Text(
-                  'Created by: ${event['created_by'] ?? 'Unknown'}',
+                  'Created by: ${event.createdBy}',
                   style: const TextStyle(fontSize: 14, color: Colors.grey),
                 ),
               ],
@@ -473,65 +518,69 @@ class _MapScreenState extends State<MapScreen> {
                       urlTemplate: AppConstants.mapTileUrl,
                       userAgentPackageName: 'com.example.vesak_go',
                     ),
-                    MarkerLayer(
-                      markers: [
-                        // User location - Pulse dot
-                        if (_currentLocation != null)
+                    // User location marker
+                    if (_currentLocation != null)
+                      MarkerLayer(
+                        markers: [
                           Marker(
-                            width: 40,
-                            height: 40,
+                            width: 30,
+                            height: 30,
                             point: _currentLocation!,
                             child: const PulseDot(
-                              size: 20,
+                              size: 15,
                               color: Colors.blue,
                               duration: 2,
                             ),
                           ),
-                        // Event markers - Colored dot with icon (no border)
-                        ..._filteredEvents.map((event) {
-                          final markerSize = _getMarkerSize();
-                          final iconSize = _getIconSize();
+                        ],
+                      ),
+                    // Event markers - Emoji only, decreased size
+                    if (_filteredEvents.isNotEmpty)
+                      MarkerLayer(
+                        markers: _filteredEvents.map((event) {
+                          final emojiSize = _getEmojiSize();
 
                           return Marker(
-                            width: markerSize,
-                            height: markerSize,
-                            point: LatLng(
-                              event['latitude'] as double,
-                              event['longitude'] as double,
-                            ),
+                            width: emojiSize + 6,
+                            height: emojiSize + 6,
+                            point: LatLng(event.latitude, event.longitude),
                             child: GestureDetector(
                               onTap: () => _showEventDetails(event),
-                              child: Container(
-                                width: markerSize,
-                                height: markerSize,
-                                decoration: BoxDecoration(
-                                  color: AppConstants.getCategoryColor(
-                                      event['category']),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    AppConstants.getCategoryIcon(
-                                        event['category']),
-                                    style: TextStyle(
-                                      fontSize: iconSize,
-                                      color: Colors.white,
-                                      shadows: [
-                                        Shadow(
-                                          color: Colors.black.withOpacity(0.3),
-                                          blurRadius: 2,
-                                          offset: const Offset(0, 1),
-                                        ),
-                                      ],
-                                    ),
+                              child: Center(
+                                child: Text(
+                                  event.getMarkerIcon(),
+                                  style: TextStyle(
+                                    fontSize: emojiSize,
+                                    shadows: [
+                                      Shadow(
+                                        color: Colors.black.withOpacity(0.3),
+                                        blurRadius: 2,
+                                        offset: const Offset(0, 1),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),
                             ),
                           );
                         }).toList(),
-                      ],
-                    ),
+                      ),
+                    // Show message when no events
+                    if (_filteredEvents.isEmpty && !_isLoading)
+                      const Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.event_busy,
+                                size: 48, color: Colors.grey),
+                            SizedBox(height: 16),
+                            Text(
+                              'No events to display',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                      ),
                   ],
                 ),
                 Positioned(

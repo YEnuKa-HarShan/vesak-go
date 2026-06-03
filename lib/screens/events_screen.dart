@@ -3,6 +3,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 import '../services/supabase_service.dart';
 import '../services/session_service.dart';
+import '../models/event_model.dart';
 import '../constants.dart';
 
 class EventsScreen extends StatefulWidget {
@@ -18,10 +19,10 @@ class _EventsScreenState extends State<EventsScreen>
   final SupabaseService _supabaseService = SupabaseService();
   final SessionService _sessionService = SessionService();
 
-  List<Map<String, dynamic>> _myEvents = [];
-  List<Map<String, dynamic>> _allEvents = [];
-  List<Map<String, dynamic>> _filteredMyEvents = [];
-  List<Map<String, dynamic>> _filteredAllEvents = [];
+  List<EventModel> _myEvents = [];
+  List<EventModel> _allEvents = [];
+  List<EventModel> _filteredMyEvents = [];
+  List<EventModel> _filteredAllEvents = [];
   bool _isLoading = true;
   String? _selectedCategory;
 
@@ -57,8 +58,7 @@ class _EventsScreenState extends State<EventsScreen>
       _allEvents = allEvents;
       if (_sessionService.isLoggedIn) {
         _myEvents = allEvents
-            .where(
-                (event) => event['user_id'] == _sessionService.currentUser?.id)
+            .where((event) => event.userId == _sessionService.currentUser?.id)
             .toList();
       } else {
         _myEvents = [];
@@ -74,10 +74,10 @@ class _EventsScreenState extends State<EventsScreen>
       _filteredAllEvents = List.from(_allEvents);
     } else {
       _filteredMyEvents = _myEvents
-          .where((event) => event['category'] == _selectedCategory)
+          .where((event) => event.category == _selectedCategory)
           .toList();
       _filteredAllEvents = _allEvents
-          .where((event) => event['category'] == _selectedCategory)
+          .where((event) => event.category == _selectedCategory)
           .toList();
     }
     setState(() {});
@@ -90,19 +90,11 @@ class _EventsScreenState extends State<EventsScreen>
     });
   }
 
-  Future<void> _editEvent(Map<String, dynamic> event) async {
+  Future<void> _editEvent(EventModel event) async {
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => EditEventScreen(
-          eventId: event['id'],
-          category: event['category'],
-          title: event['title'],
-          description: event['description'] ?? '',
-          date: event['date'],
-          time: event['time'],
-          location: event['location'],
-        ),
+        builder: (context) => EditEventScreen(event: event),
       ),
     );
 
@@ -252,8 +244,7 @@ class _EventsScreenState extends State<EventsScreen>
     );
   }
 
-  Widget _buildEventsList(List<Map<String, dynamic>> events,
-      {required bool isMyEvents}) {
+  Widget _buildEventsList(List<EventModel> events, {required bool isMyEvents}) {
     if (_isLoading) {
       return const Center(
         child: CircularProgressIndicator(),
@@ -365,16 +356,17 @@ class _EventsScreenState extends State<EventsScreen>
         itemBuilder: (context, index) {
           final event = events[index];
           final isOwner = _sessionService.isLoggedIn &&
-              event['user_id'] == _sessionService.currentUser?.id;
+              event.userId == _sessionService.currentUser?.id;
           return _buildEventCard(event, isOwner: isOwner);
         },
       ),
     );
   }
 
-  Widget _buildEventCard(Map<String, dynamic> event, {required bool isOwner}) {
-    final categoryColor =
-        AppConstants.getCategoryColor(event['category'] ?? 'තොරණ');
+  Widget _buildEventCard(EventModel event, {required bool isOwner}) {
+    final categoryColor = AppConstants.getCategoryColor(event.category);
+    final displayIcon = event.getMarkerIcon();
+    final displayName = event.getCategoryDisplayName();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -410,7 +402,7 @@ class _EventsScreenState extends State<EventsScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        event['title'] ?? 'Untitled Event',
+                        event.title,
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -425,12 +417,22 @@ class _EventsScreenState extends State<EventsScreen>
                           color: Colors.white24,
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: Text(
-                          event['category'] ?? 'Uncategorized',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: Colors.white,
-                          ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              displayIcon,
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              displayName,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -443,7 +445,7 @@ class _EventsScreenState extends State<EventsScreen>
                       if (value == 'edit') {
                         await _editEvent(event);
                       } else if (value == 'delete') {
-                        await _deleteEvent(event['id']);
+                        await _deleteEvent(event.id);
                       }
                     },
                     itemBuilder: (context) => [
@@ -477,12 +479,11 @@ class _EventsScreenState extends State<EventsScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (event['description'] != null &&
-                    event['description'].toString().isNotEmpty)
+                if (event.description != null && event.description!.isNotEmpty)
                   Column(
                     children: [
                       Text(
-                        event['description'],
+                        event.description!,
                         style: const TextStyle(
                           fontSize: 14,
                           color: Colors.black87,
@@ -497,7 +498,7 @@ class _EventsScreenState extends State<EventsScreen>
                         size: 16, color: Colors.black54),
                     const SizedBox(width: 4),
                     Text(
-                      event['date'] ?? 'Date not set',
+                      event.date,
                       style:
                           const TextStyle(fontSize: 12, color: Colors.black54),
                     ),
@@ -510,7 +511,7 @@ class _EventsScreenState extends State<EventsScreen>
                         size: 16, color: Colors.black54),
                     const SizedBox(width: 4),
                     Text(
-                      event['time'] ?? 'Time not set',
+                      event.time,
                       style:
                           const TextStyle(fontSize: 12, color: Colors.black54),
                     ),
@@ -524,7 +525,7 @@ class _EventsScreenState extends State<EventsScreen>
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text(
-                        event['location'] ?? 'Location not set',
+                        event.location,
                         style: const TextStyle(
                             fontSize: 12, color: Colors.black54),
                       ),
@@ -537,7 +538,7 @@ class _EventsScreenState extends State<EventsScreen>
                     const Icon(Icons.person, size: 16, color: Colors.black54),
                     const SizedBox(width: 4),
                     Text(
-                      'Created by: ${event['created_by'] ?? 'Unknown'}',
+                      'Created by: ${event.createdBy}',
                       style:
                           const TextStyle(fontSize: 12, color: Colors.black54),
                     ),
@@ -545,7 +546,7 @@ class _EventsScreenState extends State<EventsScreen>
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Created: ${_formatDate(event['created_at'])}',
+                  'Created: ${_formatDate(event.createdAt)}',
                   style: const TextStyle(fontSize: 11, color: Colors.grey),
                 ),
               ],
@@ -556,36 +557,15 @@ class _EventsScreenState extends State<EventsScreen>
     );
   }
 
-  String _formatDate(String? dateString) {
-    if (dateString == null) return 'Unknown date';
-    try {
-      final date = DateTime.parse(dateString);
-      return DateFormat('dd/MM/yyyy').format(date);
-    } catch (e) {
-      return 'Unknown date';
-    }
+  String _formatDate(DateTime date) {
+    return DateFormat('dd/MM/yyyy').format(date);
   }
 }
 
 class EditEventScreen extends StatefulWidget {
-  final String eventId;
-  final String category;
-  final String title;
-  final String description;
-  final String date;
-  final String time;
-  final String location;
+  final EventModel event;
 
-  const EditEventScreen({
-    super.key,
-    required this.eventId,
-    required this.category,
-    required this.title,
-    required this.description,
-    required this.date,
-    required this.time,
-    required this.location,
-  });
+  const EditEventScreen({super.key, required this.event});
 
   @override
   State<EditEventScreen> createState() => _EditEventScreenState();
@@ -593,38 +573,26 @@ class EditEventScreen extends StatefulWidget {
 
 class _EditEventScreenState extends State<EditEventScreen> {
   late String _selectedCategory;
+  late String _selectedFoodType;
   late TextEditingController _titleController;
   late TextEditingController _descriptionController;
   late TextEditingController _locationController;
-  DateTime? _selectedDate;
-  TimeOfDay? _selectedTime;
+  late TextEditingController _dateController;
+  late TextEditingController _timeController;
   final SupabaseService _supabaseService = SupabaseService();
   bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _selectedCategory = widget.category;
-    _titleController = TextEditingController(text: widget.title);
-    _descriptionController = TextEditingController(text: widget.description);
-    _locationController = TextEditingController(text: widget.location);
-
-    try {
-      _selectedDate = DateTime.parse(widget.date);
-    } catch (e) {
-      _selectedDate = null;
-    }
-
-    try {
-      final timeParts = widget.time.split(':');
-      if (timeParts.length >= 2) {
-        _selectedTime = TimeOfDay(
-            hour: int.parse(timeParts[0]),
-            minute: int.parse(timeParts[1].split(' ')[0]));
-      }
-    } catch (e) {
-      _selectedTime = null;
-    }
+    _selectedCategory = widget.event.category;
+    _selectedFoodType = widget.event.foodType;
+    _titleController = TextEditingController(text: widget.event.title);
+    _descriptionController =
+        TextEditingController(text: widget.event.description ?? '');
+    _locationController = TextEditingController(text: widget.event.location);
+    _dateController = TextEditingController(text: widget.event.date);
+    _timeController = TextEditingController(text: widget.event.time);
   }
 
   @override
@@ -632,75 +600,15 @@ class _EditEventScreenState extends State<EditEventScreen> {
     _titleController.dispose();
     _descriptionController.dispose();
     _locationController.dispose();
+    _dateController.dispose();
+    _timeController.dispose();
     super.dispose();
-  }
-
-  Future<void> _selectDate() async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate ?? DateTime.now(),
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.light().copyWith(
-            primaryColor: Colors.black,
-            colorScheme: const ColorScheme.light(primary: Colors.black),
-            buttonTheme:
-                const ButtonThemeData(textTheme: ButtonTextTheme.primary),
-          ),
-          child: child!,
-        );
-      },
-    );
-
-    if (picked != null) {
-      setState(() {
-        _selectedDate = picked;
-      });
-    }
-  }
-
-  Future<void> _selectTime() async {
-    final TimeOfDay? picked = await showTimePicker(
-      context: context,
-      initialTime: _selectedTime ?? TimeOfDay.now(),
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.light().copyWith(
-            primaryColor: Colors.black,
-            colorScheme: const ColorScheme.light(primary: Colors.black),
-          ),
-          child: child!,
-        );
-      },
-    );
-
-    if (picked != null) {
-      setState(() {
-        _selectedTime = picked;
-      });
-    }
   }
 
   Future<void> _handleUpdateEvent() async {
     if (_titleController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter event title')),
-      );
-      return;
-    }
-
-    if (_selectedDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select event date')),
-      );
-      return;
-    }
-
-    if (_selectedTime == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select event time')),
       );
       return;
     }
@@ -716,12 +624,8 @@ class _EditEventScreenState extends State<EditEventScreen> {
       _isLoading = true;
     });
 
-    final dateString = DateFormat('yyyy-MM-dd').format(_selectedDate!);
-    final timeString = _selectedTime!.format(context);
-
-    // Get coordinates (keep existing or fetch new)
-    double latitude = 7.8731;
-    double longitude = 80.7718;
+    double latitude = widget.event.latitude;
+    double longitude = widget.event.longitude;
 
     try {
       LocationPermission permission = await Geolocator.checkPermission();
@@ -739,17 +643,18 @@ class _EditEventScreenState extends State<EditEventScreen> {
     }
 
     final success = await _supabaseService.updateEvent(
-      eventId: widget.eventId,
+      eventId: widget.event.id,
       category: _selectedCategory,
       title: _titleController.text,
       description: _descriptionController.text.isEmpty
           ? ''
           : _descriptionController.text,
-      date: dateString,
-      time: timeString,
+      date: _dateController.text,
+      time: _timeController.text,
       location: _locationController.text,
       latitude: latitude,
       longitude: longitude,
+      foodType: _selectedCategory == 'දන්සල' ? _selectedFoodType : 'none',
     );
 
     setState(() {
@@ -820,12 +725,24 @@ class _EditEventScreenState extends State<EditEventScreen> {
               items: AppConstants.eventCategories.map((category) {
                 return DropdownMenuItem(
                   value: category,
-                  child: Text(category),
+                  child: Row(
+                    children: [
+                      Text(
+                        AppConstants.getCategoryIcon(category),
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(category),
+                    ],
+                  ),
                 );
               }).toList(),
               onChanged: (value) {
                 setState(() {
                   _selectedCategory = value!;
+                  if (value != 'දන්සල') {
+                    _selectedFoodType = 'none';
+                  }
                 });
               },
               style: const TextStyle(color: Colors.black),
@@ -833,6 +750,52 @@ class _EditEventScreenState extends State<EditEventScreen> {
               icon: const Icon(Icons.arrow_drop_down, color: Colors.black),
             ),
             const SizedBox(height: 20),
+            if (_selectedCategory == 'දන්සල')
+              Column(
+                children: [
+                  DropdownButtonFormField<String>(
+                    value:
+                        _selectedFoodType == 'none' ? null : _selectedFoodType,
+                    decoration: InputDecoration(
+                      labelText: 'Food Type *',
+                      labelStyle: const TextStyle(color: Colors.black),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide:
+                            const BorderSide(color: Colors.black, width: 2),
+                      ),
+                    ),
+                    items: AppConstants.foodTypes.map((food) {
+                      return DropdownMenuItem(
+                        value: food['sinhala'],
+                        child: Row(
+                          children: [
+                            Text(
+                              food['emoji']!,
+                              style: const TextStyle(fontSize: 20),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(food['sinhala']!),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedFoodType = value!;
+                      });
+                    },
+                    style: const TextStyle(color: Colors.black),
+                    dropdownColor: Colors.white,
+                    icon:
+                        const Icon(Icons.arrow_drop_down, color: Colors.black),
+                  ),
+                  const SizedBox(height: 20),
+                ],
+              ),
             TextField(
               controller: _titleController,
               decoration: InputDecoration(
@@ -866,62 +829,38 @@ class _EditEventScreenState extends State<EditEventScreen> {
               style: const TextStyle(color: Colors.black),
             ),
             const SizedBox(height: 20),
-            GestureDetector(
-              onTap: _selectDate,
-              child: AbsorbPointer(
-                child: TextField(
-                  controller: TextEditingController(
-                    text: _selectedDate != null
-                        ? DateFormat('yyyy-MM-dd').format(_selectedDate!)
-                        : '',
-                  ),
-                  decoration: InputDecoration(
-                    labelText: 'Date *',
-                    labelStyle: const TextStyle(color: Colors.black),
-                    hintText: 'Select date',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide:
-                          const BorderSide(color: Colors.black, width: 2),
-                    ),
-                    suffixIcon:
-                        const Icon(Icons.calendar_today, color: Colors.black),
-                  ),
-                  style: const TextStyle(color: Colors.black),
+            TextField(
+              controller: _dateController,
+              decoration: InputDecoration(
+                labelText: 'Date *',
+                labelStyle: const TextStyle(color: Colors.black),
+                hintText: 'YYYY-MM-DD',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: Colors.black, width: 2),
                 ),
               ),
+              style: const TextStyle(color: Colors.black),
             ),
             const SizedBox(height: 20),
-            GestureDetector(
-              onTap: _selectTime,
-              child: AbsorbPointer(
-                child: TextField(
-                  controller: TextEditingController(
-                    text: _selectedTime != null
-                        ? _selectedTime!.format(context)
-                        : '',
-                  ),
-                  decoration: InputDecoration(
-                    labelText: 'Time *',
-                    labelStyle: const TextStyle(color: Colors.black),
-                    hintText: 'Select time',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide:
-                          const BorderSide(color: Colors.black, width: 2),
-                    ),
-                    suffixIcon:
-                        const Icon(Icons.access_time, color: Colors.black),
-                  ),
-                  style: const TextStyle(color: Colors.black),
+            TextField(
+              controller: _timeController,
+              decoration: InputDecoration(
+                labelText: 'Time *',
+                labelStyle: const TextStyle(color: Colors.black),
+                hintText: 'HH:MM AM/PM',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: Colors.black, width: 2),
                 ),
               ),
+              style: const TextStyle(color: Colors.black),
             ),
             const SizedBox(height: 20),
             TextField(

@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
 import '../models/user_model.dart';
+import '../models/event_model.dart';
 import '../constants.dart';
 
 class SupabaseService {
@@ -183,6 +184,7 @@ class SupabaseService {
     required String createdBy,
     required double latitude,
     required double longitude,
+    required String foodType,
     String? description,
   }) async {
     try {
@@ -198,12 +200,12 @@ class SupabaseService {
         'created_at': DateTime.now().toIso8601String(),
         'latitude': latitude,
         'longitude': longitude,
+        'food_type': foodType,
       };
 
       await _supabase.from('events').insert(newEvent);
 
-      final updatedUser =
-          await _addXpAndReturnUser(userId, 50, 'event_created');
+      await _addXpAndReturnUser(userId, 50, 'event_created');
 
       return true;
     } catch (e) {
@@ -259,6 +261,7 @@ class SupabaseService {
     required String location,
     required double latitude,
     required double longitude,
+    required String foodType,
   }) async {
     try {
       final updatedEvent = {
@@ -270,6 +273,7 @@ class SupabaseService {
         'location': location,
         'latitude': latitude,
         'longitude': longitude,
+        'food_type': foodType,
       };
 
       await _supabase.from('events').update(updatedEvent).eq('id', eventId);
@@ -292,36 +296,90 @@ class SupabaseService {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getAllEvents() async {
+  Future<List<EventModel>> getAllEvents() async {
     try {
       final response = await _supabase
           .from('events')
           .select('*')
           .order('created_at', ascending: false);
 
-      return response;
+      List<EventModel> events = [];
+      for (var json in response) {
+        try {
+          events.add(EventModel(
+            id: json['id'] ?? '',
+            category: json['category'] ?? 'තොරණ',
+            title: json['title'] ?? 'Untitled',
+            description: json['description'],
+            date: json['date'] ?? '',
+            time: json['time'] ?? '',
+            location: json['location'] ?? '',
+            userId: json['user_id'] ?? '',
+            createdBy: json['created_by'] ?? 'Unknown',
+            createdAt: json['created_at'] != null
+                ? DateTime.parse(json['created_at'])
+                : DateTime.now(),
+            latitude: (json['latitude'] as num?)?.toDouble() ?? 7.8731,
+            longitude: (json['longitude'] as num?)?.toDouble() ?? 80.7718,
+            foodType: json['food_type'] ?? 'none',
+          ));
+        } catch (e) {
+          print('Error parsing event: $e');
+        }
+      }
+      return events;
     } catch (e) {
       print('Get all events error: $e');
       return [];
     }
   }
 
-  Future<List<Map<String, dynamic>>> getEventsForMap() async {
+  Future<List<EventModel>> getEventsForMap() async {
     try {
       final response = await _supabase
           .from('events')
           .select(
-              'id, category, title, date, time, location, latitude, longitude, created_by')
+              'id, category, title, date, time, location, latitude, longitude, created_by, food_type')
           .order('created_at', ascending: false);
 
-      return response;
+      List<EventModel> events = [];
+      for (var json in response) {
+        try {
+          final latitude = (json['latitude'] as num?)?.toDouble();
+          final longitude = (json['longitude'] as num?)?.toDouble();
+
+          if (latitude == null || longitude == null) {
+            print('Skipping event ${json['id']} - missing coordinates');
+            continue;
+          }
+
+          events.add(EventModel(
+            id: json['id'] ?? '',
+            category: json['category'] ?? 'තොරණ',
+            title: json['title'] ?? 'Untitled',
+            description: null,
+            date: json['date'] ?? '',
+            time: json['time'] ?? '',
+            location: json['location'] ?? '',
+            userId: '',
+            createdBy: json['created_by'] ?? 'Unknown',
+            createdAt: DateTime.now(),
+            latitude: latitude,
+            longitude: longitude,
+            foodType: json['food_type'] ?? 'none',
+          ));
+        } catch (e) {
+          print('Error parsing map event: $e');
+        }
+      }
+      return events;
     } catch (e) {
       print('Get events for map error: $e');
       return [];
     }
   }
 
-  Future<List<Map<String, dynamic>>> getMyEvents(String userId) async {
+  Future<List<EventModel>> getMyEvents(String userId) async {
     try {
       final response = await _supabase
           .from('events')
@@ -329,7 +387,31 @@ class SupabaseService {
           .eq('user_id', userId)
           .order('created_at', ascending: false);
 
-      return response;
+      List<EventModel> events = [];
+      for (var json in response) {
+        try {
+          events.add(EventModel(
+            id: json['id'] ?? '',
+            category: json['category'] ?? 'තොරණ',
+            title: json['title'] ?? 'Untitled',
+            description: json['description'],
+            date: json['date'] ?? '',
+            time: json['time'] ?? '',
+            location: json['location'] ?? '',
+            userId: json['user_id'] ?? '',
+            createdBy: json['created_by'] ?? 'Unknown',
+            createdAt: json['created_at'] != null
+                ? DateTime.parse(json['created_at'])
+                : DateTime.now(),
+            latitude: (json['latitude'] as num?)?.toDouble() ?? 7.8731,
+            longitude: (json['longitude'] as num?)?.toDouble() ?? 80.7718,
+            foodType: json['food_type'] ?? 'none',
+          ));
+        } catch (e) {
+          print('Error parsing my event: $e');
+        }
+      }
+      return events;
     } catch (e) {
       print('Get my events error: $e');
       return [];
