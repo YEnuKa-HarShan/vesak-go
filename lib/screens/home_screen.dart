@@ -21,7 +21,8 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final SupabaseService _supabaseService = SupabaseService();
-  final SessionService _sessionService = SessionService();
+  final SessionService _sessionService =
+      SessionService(); // Fixed: Changed from SupabaseService to SessionService
 
   bool _isLoading = true;
   int _eventsCount = 0;

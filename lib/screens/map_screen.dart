@@ -205,8 +205,8 @@ class _MapScreenState extends State<MapScreen> {
     final icon = event.getMarkerIcon();
     final color = AppConstants.getCategoryColor(event.category);
 
-    // Zoom < 12: Color dot only (no emoji)
-    if (zoom < 12) {
+    // Zoom < 14: Color dot only
+    if (zoom < 14) {
       return GestureDetector(
         onTap: () => _showEventDetails(event),
         behavior: HitTestBehavior.opaque,
@@ -215,8 +215,8 @@ class _MapScreenState extends State<MapScreen> {
           height: 44,
           child: Center(
             child: Container(
-              width: 12,
-              height: 12,
+              width: 14,
+              height: 14,
               decoration: BoxDecoration(
                 color: color,
                 shape: BoxShape.circle,
@@ -234,95 +234,30 @@ class _MapScreenState extends State<MapScreen> {
       );
     }
 
-    // Zoom 12-14: Colored dot with small emoji inside
-    else if (zoom < 14) {
-      return GestureDetector(
-        onTap: () => _showEventDetails(event),
-        behavior: HitTestBehavior.opaque,
-        child: SizedBox(
-          width: 44,
-          height: 44,
-          child: Center(
-            child: Container(
-              width: 20,
-              height: 20,
-              decoration: BoxDecoration(
-                color: color,
-                shape: BoxShape.circle,
-                border: Border.all(color: AppTheme.white, width: 1.5),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.25),
-                    blurRadius: 2,
-                    offset: const Offset(0, 1),
-                  ),
-                ],
-              ),
-              child: Center(
-                child: Text(
-                  icon,
-                  style: const TextStyle(fontSize: 10, color: AppTheme.white),
+    // Zoom >= 14: Emoji only
+    return GestureDetector(
+      onTap: () => _showEventDetails(event),
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
+        width: 48,
+        height: 48,
+        child: Center(
+          child: Text(
+            icon,
+            style: const TextStyle(
+              fontSize: 24,
+              shadows: [
+                Shadow(
+                  color: Colors.black26,
+                  blurRadius: 3,
+                  offset: Offset(0, 1),
                 ),
-              ),
+              ],
             ),
           ),
         ),
-      );
-    }
-
-    // Zoom 14-16: Emoji only (medium)
-    else if (zoom < 16) {
-      return GestureDetector(
-        onTap: () => _showEventDetails(event),
-        behavior: HitTestBehavior.opaque,
-        child: SizedBox(
-          width: 44,
-          height: 44,
-          child: Center(
-            child: Text(
-              icon,
-              style: const TextStyle(
-                fontSize: 20,
-                shadows: [
-                  Shadow(
-                    color: Colors.black26,
-                    blurRadius: 3,
-                    offset: Offset(0, 1),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    // Zoom >= 16: Emoji only (large)
-    else {
-      return GestureDetector(
-        onTap: () => _showEventDetails(event),
-        behavior: HitTestBehavior.opaque,
-        child: SizedBox(
-          width: 48,
-          height: 48,
-          child: Center(
-            child: Text(
-              icon,
-              style: const TextStyle(
-                fontSize: 26,
-                shadows: [
-                  Shadow(
-                    color: Colors.black26,
-                    blurRadius: 3,
-                    offset: Offset(0, 1),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-    }
+      ),
+    );
   }
 
   void _showLegend() {
@@ -413,7 +348,7 @@ class _MapScreenState extends State<MapScreen> {
 
                       const SizedBox(height: 16),
 
-                      // Zoom Level Legend
+                      // Zoom Level Guide
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -432,27 +367,15 @@ class _MapScreenState extends State<MapScreen> {
                             ),
                             const SizedBox(height: 12),
                             _buildLegendZoomItem(
-                              'Zoom Out (< 12)',
-                              'Colored dots only',
-                              'Shows event density',
+                              'Zoom Out (< 14)',
+                              '🔴 Colored dots only',
+                              'Shows event locations and density',
                             ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 12),
                             _buildLegendZoomItem(
-                              'Medium Zoom (12-14)',
-                              'Colored dots + small emojis',
-                              'Shows category type',
-                            ),
-                            const SizedBox(height: 8),
-                            _buildLegendZoomItem(
-                              'Zoom In (14-16)',
-                              'Medium emojis only',
+                              'Zoom In (≥ 14)',
+                              '🎡 Category emojis',
                               'Clear category identification',
-                            ),
-                            const SizedBox(height: 8),
-                            _buildLegendZoomItem(
-                              'Max Zoom (> 16)',
-                              'Large emojis only',
-                              'Easy to tap and read',
                             ),
                           ],
                         ),
@@ -542,8 +465,8 @@ class _MapScreenState extends State<MapScreen> {
     return Row(
       children: [
         Container(
-          width: 4,
-          height: 4,
+          width: 6,
+          height: 6,
           decoration: BoxDecoration(
             color: AppTheme.saffron,
             shape: BoxShape.circle,
@@ -916,8 +839,8 @@ class _MapScreenState extends State<MapScreen> {
                               height: 44,
                               child: Center(
                                 child: Container(
-                                  width: 16,
-                                  height: 16,
+                                  width: 14,
+                                  height: 14,
                                   decoration: BoxDecoration(
                                     color: Colors.blue,
                                     shape: BoxShape.circle,
@@ -926,7 +849,7 @@ class _MapScreenState extends State<MapScreen> {
                                     boxShadow: [
                                       BoxShadow(
                                         color: Colors.blue.withOpacity(0.5),
-                                        blurRadius: 8,
+                                        blurRadius: 6,
                                         spreadRadius: 2,
                                       ),
                                     ],
