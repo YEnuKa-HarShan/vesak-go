@@ -205,18 +205,18 @@ class _MapScreenState extends State<MapScreen> {
     final icon = event.getMarkerIcon();
     final color = AppConstants.getCategoryColor(event.category);
 
-    // Zoom < 14: Color dot only
+    // Zoom < 14: Color dot only (10px - decreased from 14px)
     if (zoom < 14) {
       return GestureDetector(
         onTap: () => _showEventDetails(event),
         behavior: HitTestBehavior.opaque,
         child: SizedBox(
-          width: 44,
-          height: 44,
+          width: 36, // Decreased from 44px
+          height: 36,
           child: Center(
             child: Container(
-              width: 14,
-              height: 14,
+              width: 10, // Decreased from 14px
+              height: 10, // Decreased from 14px
               decoration: BoxDecoration(
                 color: color,
                 shape: BoxShape.circle,
@@ -234,18 +234,18 @@ class _MapScreenState extends State<MapScreen> {
       );
     }
 
-    // Zoom >= 14: Emoji only
+    // Zoom >= 14: Emoji only (18px - decreased from 24px)
     return GestureDetector(
       onTap: () => _showEventDetails(event),
       behavior: HitTestBehavior.opaque,
       child: SizedBox(
-        width: 48,
-        height: 48,
+        width: 40, // Decreased from 48px
+        height: 40,
         child: Center(
           child: Text(
             icon,
             style: const TextStyle(
-              fontSize: 24,
+              fontSize: 18, // Decreased from 24px
               shadows: [
                 Shadow(
                   color: Colors.black26,
@@ -309,15 +309,15 @@ class _MapScreenState extends State<MapScreen> {
                         child: Row(
                           children: [
                             Container(
-                              width: 40,
-                              height: 40,
+                              width: 30,
+                              height: 30,
                               decoration: const BoxDecoration(
                                 color: Colors.blue,
                                 shape: BoxShape.circle,
                               ),
                               child: const Center(
                                 child: Icon(Icons.my_location,
-                                    size: 20, color: AppTheme.white),
+                                    size: 16, color: AppTheme.white),
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -408,8 +408,8 @@ class _MapScreenState extends State<MapScreen> {
                           child: Row(
                             children: [
                               Container(
-                                width: 40,
-                                height: 40,
+                                width: 32,
+                                height: 32,
                                 decoration: BoxDecoration(
                                   color: color,
                                   shape: BoxShape.circle,
@@ -417,7 +417,7 @@ class _MapScreenState extends State<MapScreen> {
                                 child: Center(
                                   child: Text(
                                     icon,
-                                    style: const TextStyle(fontSize: 20),
+                                    style: const TextStyle(fontSize: 16),
                                   ),
                                 ),
                               ),
@@ -518,7 +518,7 @@ class _MapScreenState extends State<MapScreen> {
               children: [
                 Text(
                   event.getMarkerIcon(),
-                  style: const TextStyle(fontSize: 28),
+                  style: const TextStyle(fontSize: 24),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -826,31 +826,31 @@ class _MapScreenState extends State<MapScreen> {
                       urlTemplate: AppConstants.mapTileUrl,
                       userAgentPackageName: 'com.example.vesak_go',
                     ),
-                    // User location marker
+                    // User location marker (decreased size)
                     if (_currentLocation != null)
                       MarkerLayer(
                         markers: [
                           Marker(
-                            width: 44,
-                            height: 44,
+                            width: 36,
+                            height: 36,
                             point: _currentLocation!,
                             child: SizedBox(
-                              width: 44,
-                              height: 44,
+                              width: 36,
+                              height: 36,
                               child: Center(
                                 child: Container(
-                                  width: 14,
-                                  height: 14,
+                                  width: 10,
+                                  height: 10,
                                   decoration: BoxDecoration(
                                     color: Colors.blue,
                                     shape: BoxShape.circle,
                                     border: Border.all(
-                                        color: AppTheme.white, width: 2),
+                                        color: AppTheme.white, width: 1.5),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: Colors.blue.withOpacity(0.5),
-                                        blurRadius: 6,
-                                        spreadRadius: 2,
+                                        color: Colors.blue.withOpacity(0.4),
+                                        blurRadius: 4,
+                                        spreadRadius: 1,
                                       ),
                                     ],
                                   ),
@@ -860,13 +860,13 @@ class _MapScreenState extends State<MapScreen> {
                           ),
                         ],
                       ),
-                    // Event markers with dynamic zoom-based styling
+                    // Event markers with decreased sizes
                     if (_filteredEvents.isNotEmpty)
                       MarkerLayer(
                         markers: _filteredEvents.map((event) {
                           return Marker(
-                            width: 48,
-                            height: 48,
+                            width: 40,
+                            height: 40,
                             point: LatLng(event.latitude, event.longitude),
                             child: _buildEventMarker(event, _currentZoom),
                           );
