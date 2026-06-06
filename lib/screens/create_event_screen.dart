@@ -1,5 +1,7 @@
 import 'dart:io';
+import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:geolocator/geolocator.dart';
 import '../services/supabase_service.dart';
@@ -10,6 +12,55 @@ import '../models/event_model.dart';
 import '../constants.dart';
 import '../theme/app_theme.dart';
 import '../widgets/image_picker_button.dart';
+
+// ─────────────────────────────────────────────────────────────
+//  Glass helper  (matches HomeScreen / EventDetailsScreen)
+// ─────────────────────────────────────────────────────────────
+
+class _Glass extends StatelessWidget {
+  final Widget child;
+  final BorderRadius? borderRadius;
+  final EdgeInsetsGeometry? padding;
+  final Color tint;
+  final double blur;
+  final double opacity;
+  final Border? border;
+
+  const _Glass({
+    required this.child,
+    this.borderRadius,
+    this.padding,
+    this.tint = Colors.white,
+    this.blur = 18,
+    this.opacity = 0.10,
+    this.border,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final br = borderRadius ?? BorderRadius.circular(20);
+    return ClipRRect(
+      borderRadius: br,
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+        child: Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            color: tint.withOpacity(opacity),
+            borderRadius: br,
+            border: border ??
+                Border.all(color: Colors.white.withOpacity(0.18), width: 1),
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Screen
+// ─────────────────────────────────────────────────────────────
 
 class CreateEventScreen extends StatefulWidget {
   final String userId;
@@ -27,7 +78,8 @@ class CreateEventScreen extends StatefulWidget {
   State<CreateEventScreen> createState() => _CreateEventScreenState();
 }
 
-class _CreateEventScreenState extends State<CreateEventScreen> {
+class _CreateEventScreenState extends State<CreateEventScreen>
+    with SingleTickerProviderStateMixin {
   final SupabaseService _supabaseService = SupabaseService();
   final LocationService _locationService = LocationService();
   final SessionService _sessionService = SessionService();
@@ -50,10 +102,23 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   bool _isEditMode = false;
   int _currentStep = 0;
 
+  late AnimationController _fadeController;
+
+  static const int _totalSteps = 3;
+
+  // ─────────────────────────────────────────────
+  //  INIT / DISPOSE
+  // ─────────────────────────────────────────────
+
   @override
   void initState() {
     super.initState();
+    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.dark);
     _isEditMode = widget.editEvent != null;
+    _fadeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    )..forward();
 
     if (_isEditMode) {
       _loadEventData();
@@ -61,6 +126,20 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
       _getCurrentLocation();
     }
   }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descriptionController.dispose();
+    _locationController.dispose();
+    _contactController.dispose();
+    _fadeController.dispose();
+    super.dispose();
+  }
+
+  // ─────────────────────────────────────────────
+  //  DATA HELPERS
+  // ─────────────────────────────────────────────
 
   void _loadEventData() {
     final event = widget.editEvent!;
@@ -74,32 +153,23 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
 
     try {
       _selectedDate = DateTime.parse(event.date);
-    } catch (e) {
-      _selectedDate = null;
-    }
+    } catch (_) {}
 
     try {
       final timeStr = event.time.toLowerCase();
-      bool isPM = timeStr.contains('pm');
-      final timeParts =
-          timeStr.replaceAll(RegExp(r'[apm]'), '').trim().split(':');
-      int hour = int.parse(timeParts[0]);
-      final minute = int.parse(timeParts[1]);
+      final isPM = timeStr.contains('pm');
+      final parts = timeStr.replaceAll(RegExp(r'[apm]'), '').trim().split(':');
+      int hour = int.parse(parts[0]);
+      final minute = int.parse(parts[1]);
       if (isPM && hour != 12) hour += 12;
       if (!isPM && hour == 12) hour = 0;
       _selectedTime = TimeOfDay(hour: hour, minute: minute);
-    } catch (e) {
-      _selectedTime = null;
-    }
+    } catch (_) {}
   }
 
   Future<void> _getCurrentLocation() async {
-    setState(() {
-      _isGettingLocation = true;
-    });
-
+    setState(() => _isGettingLocation = true);
     final location = await _locationService.getCurrentLocation();
-
     setState(() {
       _locationController.text = location;
       _isGettingLocation = false;
@@ -107,114 +177,89 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   }
 
   Future<void> _selectDate() async {
-    final DateTime? picked = await showDatePicker(
+    final picked = await showDatePicker(
       context: context,
       initialDate: _selectedDate ?? DateTime.now(),
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 365)),
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.light().copyWith(
-            primaryColor: AppTheme.primary,
-            colorScheme: const ColorScheme.light(primary: AppTheme.primary),
-            buttonTheme:
-                const ButtonThemeData(textTheme: ButtonTextTheme.primary),
-          ),
-          child: child!,
-        );
-      },
+      builder: (context, child) => Theme(
+        data: ThemeData.light().copyWith(
+          colorScheme: const ColorScheme.light(primary: AppTheme.primary),
+          buttonTheme:
+              const ButtonThemeData(textTheme: ButtonTextTheme.primary),
+        ),
+        child: child!,
+      ),
     );
-
-    if (picked != null) {
-      setState(() {
-        _selectedDate = picked;
-      });
-    }
+    if (picked != null) setState(() => _selectedDate = picked);
   }
 
   Future<void> _selectTime() async {
-    final TimeOfDay? picked = await showTimePicker(
+    final picked = await showTimePicker(
       context: context,
       initialTime: _selectedTime ?? TimeOfDay.now(),
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.light().copyWith(
-            primaryColor: AppTheme.primary,
-            colorScheme: const ColorScheme.light(primary: AppTheme.primary),
-          ),
-          child: child!,
-        );
-      },
+      builder: (context, child) => Theme(
+        data: ThemeData.light().copyWith(
+          colorScheme: const ColorScheme.light(primary: AppTheme.primary),
+        ),
+        child: child!,
+      ),
     );
-
-    if (picked != null) {
-      setState(() {
-        _selectedTime = picked;
-      });
-    }
+    if (picked != null) setState(() => _selectedTime = picked);
   }
 
-  Future<void> _nextStep() {
+  // ─────────────────────────────────────────────
+  //  STEP NAVIGATION
+  // ─────────────────────────────────────────────
+
+  void _nextStep() {
     if (_currentStep == 0) {
       if (_selectedCategory == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select a category')),
-        );
-        return Future.value();
+        _showSnack('Please select a category', Icons.category_rounded);
+        return;
       }
       if (_selectedCategory == 'දන්සල' &&
           (_selectedFoodType == null || _selectedFoodType == 'none')) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select food type for Dansala')),
-        );
-        return Future.value();
+        _showSnack(
+            'Please select food type for Dansala', Icons.restaurant_rounded);
+        return;
       }
       if (_titleController.text.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please enter event title')),
-        );
-        return Future.value();
+        _showSnack('Please enter event title', Icons.title_rounded);
+        return;
       }
     }
 
     if (_currentStep == 1) {
       if (_selectedDate == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select event date')),
-        );
-        return Future.value();
+        _showSnack('Please select event date', Icons.calendar_today_rounded);
+        return;
       }
       if (_selectedTime == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select event time')),
-        );
-        return Future.value();
+        _showSnack('Please select event time', Icons.access_time_rounded);
+        return;
       }
       if (_locationController.text.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please enter event location')),
-        );
-        return Future.value();
+        _showSnack('Please enter event location', Icons.location_on_rounded);
+        return;
       }
     }
 
-    setState(() {
-      _currentStep++;
-    });
-    return Future.value();
+    _fadeController.forward(from: 0.0);
+    setState(() => _currentStep++);
   }
 
-  Future<void> _previousStep() {
-    setState(() {
-      _currentStep--;
-    });
-    return Future.value();
+  void _previousStep() {
+    _fadeController.forward(from: 0.0);
+    setState(() => _currentStep--);
   }
+
+  // ─────────────────────────────────────────────
+  //  SUBMIT
+  // ─────────────────────────────────────────────
 
   Future<void> _handleSubmit() async {
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     double latitude = 7.8731;
     double longitude = 80.7718;
@@ -224,10 +269,9 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
-
       if (permission != LocationPermission.denied &&
           permission != LocationPermission.deniedForever) {
-        Position position = await Geolocator.getCurrentPosition(
+        final position = await Geolocator.getCurrentPosition(
           desiredAccuracy: LocationAccuracy.high,
           timeLimit: const Duration(seconds: 10),
         );
@@ -235,7 +279,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
         longitude = position.longitude;
       }
     } catch (e) {
-      print('Could not get coordinates: $e');
+      debugPrint('Could not get coordinates: $e');
     }
 
     final dateString = DateFormat('yyyy-MM-dd').format(_selectedDate!);
@@ -295,6 +339,8 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
       );
     }
 
+    setState(() => _isLoading = false);
+
     if (success) {
       if (!_isEditMode) {
         final updatedUser = await _supabaseService.getUserById(widget.userId);
@@ -303,256 +349,518 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
         }
       }
 
-      setState(() {
-        _isLoading = false;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(_isEditMode
-                ? 'Event updated successfully!'
-                : 'Event created successfully! +50 XP')),
-      );
-      Navigator.pop(context, true);
+      if (mounted) {
+        _showSnack(
+          _isEditMode
+              ? 'Event updated successfully!'
+              : 'Event created! +50 XP 🎉',
+          Icons.check_circle_rounded,
+          isSuccess: true,
+        );
+        Navigator.pop(context, true);
+      }
     } else {
-      setState(() {
-        _isLoading = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to save event')),
-      );
+      if (mounted) {
+        _showSnack('Failed to save event. Please try again.',
+            Icons.error_outline_rounded,
+            isError: true);
+      }
     }
   }
+
+  void _showSnack(String message, IconData icon,
+      {bool isSuccess = false, bool isError = false}) {
+    final color = isError
+        ? AppTheme.error
+        : isSuccess
+            ? AppTheme.success
+            : AppTheme.primary;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(icon, color: Colors.white, size: 16),
+            const SizedBox(width: 8),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  //  BUILD ROOT
+  // ─────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.background,
-      appBar: AppBar(
-        title: Text(
-          _isEditMode ? 'Edit Event' : 'Create Event',
-          style:
-              const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-        ),
-        backgroundColor: AppTheme.primary,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: [
-          if (_currentStep > 0 && !_isLoading)
-            TextButton(
-              onPressed: _previousStep,
-              style: TextButton.styleFrom(foregroundColor: AppTheme.accent),
-              child: const Text('Back'),
-            ),
-        ],
-      ),
-      body: Stepper(
-        currentStep: _currentStep,
-        onStepContinue: _currentStep == 2 ? _handleSubmit : _nextStep,
-        onStepCancel: _currentStep > 0 ? _previousStep : null,
-        controlsBuilder: (context, details) {
-          return Padding(
-            padding: const EdgeInsets.only(top: 16),
-            child: Row(
+      body: Stack(
+        children: [
+          // ── Ambient blobs ──
+          _buildAmbientBlobs(),
+
+          // ── Main content ──
+          SafeArea(
+            child: Column(
               children: [
+                _buildHeader(),
+                _buildStepIndicator(),
                 Expanded(
-                  child: ElevatedButton(
-                    onPressed: details.onStepContinue,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.primary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                    child: Text(
-                      _currentStep == 2
-                          ? (_isEditMode ? 'Update Event' : 'Create Event')
-                          : 'Next',
-                      style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w600),
+                  child: FadeTransition(
+                    opacity: _fadeController,
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+                      child: _buildCurrentStep(),
                     ),
                   ),
                 ),
-                if (details.onStepCancel != null) const SizedBox(width: 12),
-                if (details.onStepCancel != null)
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: details.onStepCancel,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppTheme.textSecondary,
-                        side:
-                            const BorderSide(color: AppTheme.timelineInactive),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                      child: const Text('Back'),
-                    ),
-                  ),
+                _buildBottomActions(),
               ],
             ),
-          );
-        },
-        steps: [
-          // Step 1: Basic Info
-          Step(
-            title: const Text('Basic Info'),
-            subtitle: const Text('Category & Title'),
-            state: _currentStep > 0 ? StepState.complete : StepState.indexed,
-            isActive: _currentStep >= 0,
-            content: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Category Dropdown
-                DropdownButtonFormField<String>(
-                  value: _selectedCategory,
-                  decoration: InputDecoration(
-                    labelText: 'Category *',
-                    hintText: 'Select event category',
-                    prefixIcon: Icon(Icons.category, color: AppTheme.primary),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  //  AMBIENT BLOBS
+  // ─────────────────────────────────────────────
+
+  Widget _buildAmbientBlobs() {
+    return Stack(
+      children: [
+        Positioned(
+          top: -60,
+          left: -60,
+          child: Container(
+            width: 280,
+            height: 280,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppTheme.primary.withOpacity(0.12),
+            ),
+          ),
+        ),
+        Positioned(
+          top: 100,
+          right: -80,
+          child: Container(
+            width: 240,
+            height: 240,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppTheme.accent.withOpacity(0.10),
+            ),
+          ),
+        ),
+        Positioned(
+          bottom: -80,
+          left: 60,
+          child: Container(
+            width: 200,
+            height: 200,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppTheme.blobEmerald.withOpacity(0.08),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  //  GLASS HEADER
+  // ─────────────────────────────────────────────
+
+  Widget _buildHeader() {
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.55),
+            border: Border(
+              bottom: BorderSide(
+                color: Colors.white.withOpacity(0.35),
+                width: 1,
+              ),
+            ),
+          ),
+          child: Row(
+            children: [
+              // Back button
+              _Glass(
+                borderRadius: BorderRadius.circular(14),
+                blur: 12,
+                opacity: 0.55,
+                tint: Colors.white,
+                border:
+                    Border.all(color: Colors.white.withOpacity(0.35), width: 1),
+                child: SizedBox(
+                  width: 44,
+                  height: 44,
+                  child: IconButton(
+                    icon:
+                        const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+                    color: AppTheme.primary,
+                    onPressed: () => Navigator.pop(context),
+                    padding: EdgeInsets.zero,
                   ),
-                  items: AppConstants.eventCategories.map((category) {
-                    return DropdownMenuItem(
-                      value: category,
-                      child: Row(
-                        children: [
-                          Text(
-                            AppConstants.getCategoryIcon(category),
-                            style: const TextStyle(fontSize: 20),
-                          ),
-                          const SizedBox(width: 12),
-                          Text(category),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                  onChanged: (value) {
-                    setState(() {
-                      _selectedCategory = value;
-                      if (value != 'දන්සල') {
-                        _selectedFoodType = null;
-                      }
-                    });
-                  },
                 ),
-                const SizedBox(height: 16),
+              ),
 
-                // Food Type (Visible only when Category is දන්සල)
-                if (_selectedCategory == 'දන්සල')
-                  Column(
-                    children: [
-                      DropdownButtonFormField<String>(
-                        value: _selectedFoodType,
-                        decoration: InputDecoration(
-                          labelText: 'Food Type *',
-                          hintText: 'Select food type for Dansala',
-                          prefixIcon:
-                              Icon(Icons.restaurant, color: AppTheme.primary),
-                        ),
-                        items: AppConstants.foodTypes.map((food) {
-                          return DropdownMenuItem(
-                            value: food['sinhala'],
-                            child: Row(
-                              children: [
-                                Text(
-                                  food['emoji']!,
-                                  style: const TextStyle(fontSize: 24),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        food['sinhala']!,
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                      Text(
-                                        food['english']!,
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: AppTheme.textSecondary,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }).toList(),
-                        onChanged: (value) {
-                          setState(() {
-                            _selectedFoodType = value;
-                          });
-                        },
-                        // This ensures only Sinhala name is shown in the selected box
-                        selectedItemBuilder: (context) {
-                          return AppConstants.foodTypes.map((food) {
-                            return Row(
-                              children: [
-                                Text(
-                                  food['emoji']!,
-                                  style: const TextStyle(fontSize: 20),
-                                ),
-                                const SizedBox(width: 12),
-                                Text(food['sinhala']!),
-                              ],
-                            );
-                          }).toList();
-                        },
+              const SizedBox(width: 14),
+
+              // Title + subtitle
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _isEditMode ? 'Edit Event' : 'Create Event',
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.textPrimary,
+                        letterSpacing: -0.5,
                       ),
-                      const SizedBox(height: 16),
-                    ],
-                  ),
+                    ),
+                    Text(
+                      _isEditMode
+                          ? 'Update the event details below'
+                          : 'Share something with your community',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.textSecondary.withOpacity(0.8),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
-                // Title
+              // Step counter pill
+              _Glass(
+                borderRadius: BorderRadius.circular(20),
+                blur: 8,
+                opacity: 0.55,
+                tint: Colors.white,
+                border: Border.all(
+                    color: AppTheme.primary.withOpacity(0.20), width: 1),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                child: Text(
+                  'Step ${_currentStep + 1}/$_totalSteps',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  //  STEP INDICATOR
+  // ─────────────────────────────────────────────
+
+  Widget _buildStepIndicator() {
+    final stepLabels = ['Basic Info', 'Date & Location', 'Photo & Review'];
+    final stepIcons = [
+      Icons.info_outline_rounded,
+      Icons.calendar_month_rounded,
+      Icons.photo_camera_rounded,
+    ];
+
+    return Container(
+      color: Colors.transparent,
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: Column(
+        children: [
+          // Progress bar
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: (_currentStep + 1) / _totalSteps,
+              backgroundColor: AppTheme.timelineInactive.withOpacity(0.40),
+              color: AppTheme.primary,
+              minHeight: 4,
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // Step labels
+          Row(
+            children: List.generate(_totalSteps, (i) {
+              final isActive = i == _currentStep;
+              final isDone = i < _currentStep;
+              final color = isDone || isActive
+                  ? AppTheme.primary
+                  : AppTheme.textSecondary;
+
+              return Expanded(
+                child: Column(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: isDone
+                            ? AppTheme.primary
+                            : isActive
+                                ? AppTheme.primary.withOpacity(0.12)
+                                : AppTheme.timelineInactive.withOpacity(0.30),
+                        shape: BoxShape.circle,
+                        border: isActive
+                            ? Border.all(color: AppTheme.primary, width: 1.5)
+                            : null,
+                      ),
+                      child: isDone
+                          ? const Icon(Icons.check_rounded,
+                              size: 16, color: Colors.white)
+                          : Icon(stepIcons[i],
+                              size: 15,
+                              color: isActive
+                                  ? AppTheme.primary
+                                  : AppTheme.textSecondary.withOpacity(0.50)),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      stepLabels[i],
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight:
+                            isActive ? FontWeight.w700 : FontWeight.w500,
+                        color: color.withOpacity(isActive ? 1.0 : 0.6),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ),
+
+          const SizedBox(height: 4),
+        ],
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  //  STEP ROUTER
+  // ─────────────────────────────────────────────
+
+  Widget _buildCurrentStep() {
+    switch (_currentStep) {
+      case 0:
+        return _buildStepBasicInfo();
+      case 1:
+        return _buildStepDateLocation();
+      case 2:
+        return _buildStepPhotoReview();
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  //  STEP 1 — BASIC INFO
+  // ─────────────────────────────────────────────
+
+  Widget _buildStepBasicInfo() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionLabel('Category', Icons.category_rounded),
+        const SizedBox(height: 10),
+
+        // Category grid
+        _buildGlassCard(
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: AppConstants.eventCategories.map((category) {
+                final isSelected = _selectedCategory == category;
+                final catColor = AppConstants.getCategoryColor(category);
+                return GestureDetector(
+                  onTap: () => setState(() {
+                    _selectedCategory = category;
+                    if (category != 'දන්සල') _selectedFoodType = null;
+                  }),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? catColor.withOpacity(0.15)
+                          : Colors.white.withOpacity(0.50),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: isSelected
+                            ? catColor.withOpacity(0.60)
+                            : Colors.white.withOpacity(0.60),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          AppConstants.getCategoryIcon(category),
+                          style: const TextStyle(fontSize: 18),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          category,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight:
+                                isSelected ? FontWeight.w700 : FontWeight.w500,
+                            color:
+                                isSelected ? catColor : AppTheme.textSecondary,
+                          ),
+                        ),
+                        if (isSelected) ...[
+                          const SizedBox(width: 4),
+                          Icon(Icons.check_circle_rounded,
+                              size: 14, color: catColor),
+                        ],
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+
+        // Food Type (Dansala only)
+        if (_selectedCategory == 'දන්සල') ...[
+          const SizedBox(height: 20),
+          _buildSectionLabel('Food Type', Icons.restaurant_rounded),
+          const SizedBox(height: 10),
+          _buildGlassCard(
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: DropdownButtonFormField<String>(
+                value: _selectedFoodType,
+                decoration: _inputDecoration(
+                  label: 'Food Type *',
+                  hint: 'Select food type for Dansala',
+                  icon: Icons.restaurant_rounded,
+                ),
+                items: AppConstants.foodTypes.map((food) {
+                  return DropdownMenuItem(
+                    value: food['sinhala'],
+                    child: Row(
+                      children: [
+                        Text(food['emoji']!,
+                            style: const TextStyle(fontSize: 22)),
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(food['sinhala']!,
+                                style: const TextStyle(
+                                    fontSize: 14, fontWeight: FontWeight.w500)),
+                            Text(food['english']!,
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: AppTheme.textSecondary)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+                selectedItemBuilder: (context) =>
+                    AppConstants.foodTypes.map((food) {
+                  return Row(
+                    children: [
+                      Text(food['emoji']!,
+                          style: const TextStyle(fontSize: 18)),
+                      const SizedBox(width: 10),
+                      Text(food['sinhala']!),
+                    ],
+                  );
+                }).toList(),
+                onChanged: (v) => setState(() => _selectedFoodType = v),
+              ),
+            ),
+          ),
+        ],
+
+        const SizedBox(height: 20),
+        _buildSectionLabel('Event Details', Icons.edit_rounded),
+        const SizedBox(height: 10),
+        _buildGlassCard(
+          child: Padding(
+            padding: const EdgeInsets.all(4),
+            child: Column(
+              children: [
                 TextField(
                   controller: _titleController,
-                  decoration: InputDecoration(
-                    labelText: 'Event Title *',
-                    hintText: 'e.g., Vesak Lantern Festival',
-                    prefixIcon: Icon(Icons.title, color: AppTheme.primary),
+                  decoration: _inputDecoration(
+                    label: 'Event Title *',
+                    hint: 'e.g., Vesak Lantern Festival',
+                    icon: Icons.title_rounded,
                   ),
                 ),
-                const SizedBox(height: 16),
-
-                // Description
+                const SizedBox(height: 12),
                 TextField(
                   controller: _descriptionController,
                   maxLines: 3,
-                  decoration: InputDecoration(
-                    labelText: 'Description (Optional)',
-                    hintText: 'Tell people about your event...',
-                    prefixIcon:
-                        Icon(Icons.description, color: AppTheme.primary),
-                    alignLabelWithHint: true,
+                  decoration: _inputDecoration(
+                    label: 'Description (Optional)',
+                    hint: 'Tell people about your event...',
+                    icon: Icons.description_rounded,
+                    alignHint: true,
                   ),
                 ),
               ],
             ),
           ),
+        ),
+      ],
+    );
+  }
 
-          // Step 2: Date, Time & Location
-          Step(
-            title: const Text('Date & Location'),
-            subtitle: const Text('When and where'),
-            state: _currentStep > 1 ? StepState.complete : StepState.indexed,
-            isActive: _currentStep >= 1,
-            content: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+  // ─────────────────────────────────────────────
+  //  STEP 2 — DATE & LOCATION
+  // ─────────────────────────────────────────────
+
+  Widget _buildStepDateLocation() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionLabel('When', Icons.calendar_month_rounded),
+        const SizedBox(height: 10),
+
+        _buildGlassCard(
+          child: Padding(
+            padding: const EdgeInsets.all(4),
+            child: Column(
               children: [
-                // Date Picker
+                // Date picker tile
                 GestureDetector(
                   onTap: _selectDate,
                   child: AbsorbPointer(
@@ -563,20 +871,19 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                                 .format(_selectedDate!)
                             : '',
                       ),
-                      decoration: InputDecoration(
-                        labelText: 'Date *',
-                        hintText: 'Select date',
-                        prefixIcon:
-                            Icon(Icons.calendar_today, color: AppTheme.primary),
-                        suffixIcon: Icon(Icons.arrow_drop_down,
-                            color: AppTheme.primary),
+                      decoration: _inputDecoration(
+                        label: 'Date *',
+                        hint: 'Select date',
+                        icon: Icons.calendar_today_rounded,
+                        suffixIcon: Icons.arrow_drop_down_rounded,
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
 
-                // Time Picker
+                const SizedBox(height: 12),
+
+                // Time picker tile
                 GestureDetector(
                   onTap: _selectTime,
                   child: AbsorbPointer(
@@ -586,242 +893,513 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                             ? _selectedTime!.format(context)
                             : '',
                       ),
-                      decoration: InputDecoration(
-                        labelText: 'Time *',
-                        hintText: 'Select time',
-                        prefixIcon:
-                            Icon(Icons.access_time, color: AppTheme.primary),
-                        suffixIcon: Icon(Icons.arrow_drop_down,
-                            color: AppTheme.primary),
+                      decoration: _inputDecoration(
+                        label: 'Time *',
+                        hint: 'Select time',
+                        icon: Icons.access_time_rounded,
+                        suffixIcon: Icons.arrow_drop_down_rounded,
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+        ),
 
-                // Location
+        const SizedBox(height: 20),
+        _buildSectionLabel('Where', Icons.location_on_rounded),
+        const SizedBox(height: 10),
+
+        _buildGlassCard(
+          child: Padding(
+            padding: const EdgeInsets.all(4),
+            child: Column(
+              children: [
                 TextField(
                   controller: _locationController,
-                  decoration: InputDecoration(
-                    labelText: 'Location *',
-                    hintText: 'Event address',
-                    prefixIcon:
-                        Icon(Icons.location_on, color: AppTheme.primary),
-                    suffixIcon: _isGettingLocation
+                  decoration: _inputDecoration(
+                    label: 'Location *',
+                    hint: 'Event address or venue',
+                    icon: Icons.location_on_rounded,
+                    suffixWidget: _isGettingLocation
                         ? const Padding(
                             padding: EdgeInsets.all(12),
                             child: SizedBox(
                               width: 20,
                               height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: AppTheme.primary),
                             ),
                           )
                         : IconButton(
-                            icon: Icon(Icons.my_location,
+                            icon: const Icon(Icons.my_location_rounded,
                                 color: AppTheme.primary),
                             onPressed: _getCurrentLocation,
                           ),
                   ),
                 ),
-                const SizedBox(height: 16),
-
-                // Contact Info
+                const SizedBox(height: 12),
                 TextField(
                   controller: _contactController,
-                  decoration: InputDecoration(
-                    labelText: 'Contact Info (Optional)',
-                    hintText: 'Phone number or email for inquiries',
-                    prefixIcon:
-                        Icon(Icons.contact_phone, color: AppTheme.primary),
-                  ),
                   keyboardType: TextInputType.phone,
+                  decoration: _inputDecoration(
+                    label: 'Contact Info (Optional)',
+                    hint: 'Phone number or email',
+                    icon: Icons.contact_phone_rounded,
+                  ),
                 ),
               ],
             ),
           ),
+        ),
 
-          // Step 3: Images & Review
-          Step(
-            title: const Text('Images & Review'),
-            subtitle: const Text('Add photos'),
-            state: _currentStep == 2 ? StepState.editing : StepState.indexed,
-            isActive: _currentStep >= 2,
-            content: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Image Picker
-                Center(
-                  child: ImagePickerButton(
+        // GPS hint
+        const SizedBox(height: 12),
+        _Glass(
+          borderRadius: BorderRadius.circular(14),
+          blur: 8,
+          opacity: 0.45,
+          tint: AppTheme.primary,
+          border:
+              Border.all(color: AppTheme.primary.withOpacity(0.15), width: 1),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Row(
+            children: [
+              const Icon(Icons.info_outline_rounded,
+                  size: 15, color: AppTheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Tap  to auto-fill your current location.',
+                  style: TextStyle(
+                      fontSize: 12, color: AppTheme.primary.withOpacity(0.85)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  //  STEP 3 — PHOTO & REVIEW
+  // ─────────────────────────────────────────────
+
+  Widget _buildStepPhotoReview() {
+    final canPreview = _selectedCategory != null &&
+        _titleController.text.isNotEmpty &&
+        _selectedDate != null &&
+        _selectedTime != null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionLabel('Event Photo', Icons.photo_camera_rounded),
+        const SizedBox(height: 10),
+        _buildGlassCard(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Center(
+              child: Column(
+                children: [
+                  ImagePickerButton(
                     selectedImage: _selectedImage,
                     existingImageUrl: _existingImageUrl,
-                    onImagePicked: (file) {
-                      setState(() {
-                        _selectedImage = file;
-                      });
-                    },
-                    onRemoveImage: () {
-                      setState(() {
-                        _selectedImage = null;
-                        _existingImageUrl = null;
-                        _existingImagePublicId = null;
-                      });
-                    },
+                    onImagePicked: (file) =>
+                        setState(() => _selectedImage = file),
+                    onRemoveImage: () => setState(() {
+                      _selectedImage = null;
+                      _existingImageUrl = null;
+                      _existingImagePublicId = null;
+                    }),
                     size: 140,
                   ),
-                ),
-                if (_existingImageUrl != null &&
-                    _existingImageUrl!.isNotEmpty &&
-                    _selectedImage == null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Center(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: AppTheme.accent.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          'Current image will be kept',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: AppTheme.accent,
-                          ),
+                  if (_existingImageUrl != null &&
+                      _existingImageUrl!.isNotEmpty &&
+                      _selectedImage == null) ...[
+                    const SizedBox(height: 10),
+                    _Glass(
+                      borderRadius: BorderRadius.circular(20),
+                      blur: 8,
+                      opacity: 0.45,
+                      tint: AppTheme.accent,
+                      border: Border.all(
+                          color: AppTheme.accent.withOpacity(0.25), width: 1),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      child: const Text(
+                        '✓ Current image will be kept',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.accent,
                         ),
                       ),
                     ),
-                  ),
-
-                const SizedBox(height: 24),
-
-                // Preview Card
-                if (_selectedCategory != null &&
-                    _titleController.text.isNotEmpty &&
-                    _selectedDate != null &&
-                    _selectedTime != null)
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppTheme.surface,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: AppTheme.timelineInactive),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.04),
-                          blurRadius: 12,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
+                  ],
+                  const SizedBox(height: 8),
+                  Text(
+                    'Optional — add a photo to make your event stand out',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppTheme.textSecondary.withOpacity(0.75),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Preview',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: AppTheme.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Container(
-                              width: 50,
-                              height: 50,
-                              decoration: BoxDecoration(
-                                color: AppConstants.getCategoryColor(
-                                    _selectedCategory!),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  AppConstants.getCategoryIcon(
-                                      _selectedCategory!),
-                                  style: const TextStyle(fontSize: 28),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    _titleController.text,
-                                    style: const TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppTheme.textPrimary,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  if (_selectedCategory == 'දන්සල' &&
-                                      _selectedFoodType != null)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 4),
-                                      child: Row(
-                                        children: [
-                                          Text(
-                                            AppConstants.getFoodTypeEmoji(
-                                                _selectedFoodType!),
-                                            style:
-                                                const TextStyle(fontSize: 12),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            _selectedFoodType!,
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              color: AppTheme.textSecondary,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  Text(
-                                    '${DateFormat('MMM d, yyyy').format(_selectedDate!)} at ${_selectedTime!.format(context)}',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: AppTheme.textSecondary,
-                                    ),
-                                  ),
-                                  Text(
-                                    _locationController.text.isNotEmpty
-                                        ? _locationController.text
-                                        : 'Location not set',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: AppTheme.textSecondary,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+                    textAlign: TextAlign.center,
                   ),
-              ],
+                ],
+              ),
             ),
           ),
+        ),
+        if (canPreview) ...[
+          const SizedBox(height: 24),
+          _buildSectionLabel('Preview', Icons.visibility_rounded),
+          const SizedBox(height: 10),
+          _buildPreviewCard(),
         ],
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  //  PREVIEW CARD
+  // ─────────────────────────────────────────────
+
+  Widget _buildPreviewCard() {
+    final catColor = AppConstants.getCategoryColor(_selectedCategory!);
+    final catIcon = AppConstants.getCategoryIcon(_selectedCategory!);
+
+    return _buildGlassCard(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                // Category icon box
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: catColor.withOpacity(0.14),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Center(
+                    child: Text(catIcon, style: const TextStyle(fontSize: 26)),
+                  ),
+                ),
+                const SizedBox(width: 12),
+
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _titleController.text,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.textPrimary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+
+                      // Category chip
+                      _Glass(
+                        borderRadius: BorderRadius.circular(20),
+                        blur: 4,
+                        opacity: 0.45,
+                        tint: catColor,
+                        border: Border.all(
+                            color: catColor.withOpacity(0.20), width: 1),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        child: Text(
+                          _selectedCategory!,
+                          style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: catColor),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            _previewInfoRow(
+              Icons.calendar_today_rounded,
+              DateFormat('MMM d, yyyy').format(_selectedDate!),
+            ),
+            const SizedBox(height: 6),
+            _previewInfoRow(
+              Icons.access_time_rounded,
+              _selectedTime!.format(context),
+            ),
+            if (_locationController.text.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              _previewInfoRow(
+                Icons.location_on_rounded,
+                _locationController.text,
+                multiline: true,
+              ),
+            ],
+            if (_selectedCategory == 'දන්සල' && _selectedFoodType != null) ...[
+              const SizedBox(height: 6),
+              _previewInfoRow(
+                Icons.restaurant_rounded,
+                '${AppConstants.getFoodTypeEmoji(_selectedFoodType!)} $_selectedFoodType',
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
 
-  @override
-  void dispose() {
-    _titleController.dispose();
-    _descriptionController.dispose();
-    _locationController.dispose();
-    _contactController.dispose();
-    super.dispose();
+  Widget _previewInfoRow(IconData icon, String text, {bool multiline = false}) {
+    return Row(
+      crossAxisAlignment:
+          multiline ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+      children: [
+        Icon(icon, size: 13, color: AppTheme.textSecondary.withOpacity(0.7)),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 12,
+              color: AppTheme.textSecondary.withOpacity(0.85),
+            ),
+            maxLines: multiline ? 2 : 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  //  BOTTOM ACTIONS
+  // ─────────────────────────────────────────────
+
+  Widget _buildBottomActions() {
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.60),
+            border: Border(
+              top: BorderSide(
+                color: Colors.white.withOpacity(0.35),
+                width: 1,
+              ),
+            ),
+          ),
+          child: Row(
+            children: [
+              // Back button (visible from step 1+)
+              if (_currentStep > 0) ...[
+                _Glass(
+                  borderRadius: BorderRadius.circular(16),
+                  blur: 12,
+                  opacity: 0.55,
+                  tint: Colors.white,
+                  border: Border.all(
+                      color: AppTheme.timelineInactive.withOpacity(0.60),
+                      width: 1),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: _previousStep,
+                      child: const Padding(
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.arrow_back_ios_new_rounded,
+                                size: 14, color: AppTheme.textSecondary),
+                            SizedBox(width: 6),
+                            Text(
+                              'Back',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+              ],
+
+              // Next / Submit button
+              Expanded(
+                child: _Glass(
+                  borderRadius: BorderRadius.circular(16),
+                  blur: 12,
+                  opacity: 0.90,
+                  tint: AppTheme.primary,
+                  border: Border.all(
+                      color: AppTheme.primary.withOpacity(0.30), width: 1),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: _isLoading
+                          ? null
+                          : (_currentStep == _totalSteps - 1
+                              ? _handleSubmit
+                              : _nextStep),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 15),
+                        child: Center(
+                          child: _isLoading
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      _currentStep == _totalSteps - 1
+                                          ? (_isEditMode
+                                              ? 'Update Event'
+                                              : 'Create Event')
+                                          : 'Continue',
+                                      style: const TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                    if (_currentStep < _totalSteps - 1) ...[
+                                      const SizedBox(width: 8),
+                                      const Icon(
+                                          Icons.arrow_forward_ios_rounded,
+                                          size: 14,
+                                          color: Colors.white),
+                                    ] else ...[
+                                      const SizedBox(width: 8),
+                                      const Icon(Icons.check_rounded,
+                                          size: 16, color: Colors.white),
+                                    ],
+                                  ],
+                                ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  //  SHARED WIDGETS
+  // ─────────────────────────────────────────────
+
+  Widget _buildSectionLabel(String label, IconData icon) {
+    return Row(
+      children: [
+        Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: AppTheme.primary.withOpacity(0.10),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, size: 14, color: AppTheme.primary),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: AppTheme.textPrimary,
+            letterSpacing: -0.2,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGlassCard({required Widget child}) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.60),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withOpacity(0.55), width: 1),
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+
+  InputDecoration _inputDecoration({
+    required String label,
+    required String hint,
+    required IconData icon,
+    IconData? suffixIcon,
+    Widget? suffixWidget,
+    bool alignHint = false,
+  }) {
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      alignLabelWithHint: alignHint,
+      prefixIcon: Icon(icon, color: AppTheme.primary, size: 20),
+      suffixIcon: suffixWidget ??
+          (suffixIcon != null
+              ? Icon(suffixIcon, color: AppTheme.primary)
+              : null),
+      filled: true,
+      fillColor: Colors.white.withOpacity(0.70),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: Colors.white.withOpacity(0.5)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: Colors.white.withOpacity(0.5)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
+      ),
+      labelStyle: const TextStyle(color: AppTheme.textSecondary),
+      hintStyle: TextStyle(color: AppTheme.textSecondary.withOpacity(0.6)),
+    );
   }
 }

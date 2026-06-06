@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
@@ -10,6 +11,55 @@ import '../theme/app_theme.dart';
 import '../widgets/event_card.dart';
 import 'create_event_screen.dart';
 import 'event_details_screen.dart';
+
+// ─────────────────────────────────────────────────────────────
+//  Glass helper  (mirrors HomeScreen._Glass)
+// ─────────────────────────────────────────────────────────────
+
+class _Glass extends StatelessWidget {
+  final Widget child;
+  final BorderRadius? borderRadius;
+  final EdgeInsetsGeometry? padding;
+  final Color tint;
+  final double blur;
+  final double opacity;
+  final Border? border;
+
+  const _Glass({
+    required this.child,
+    this.borderRadius,
+    this.padding,
+    this.tint = Colors.white,
+    this.blur = 18,
+    this.opacity = 0.10,
+    this.border,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final br = borderRadius ?? BorderRadius.circular(20);
+    return ClipRRect(
+      borderRadius: br,
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+        child: Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            color: tint.withOpacity(opacity),
+            borderRadius: br,
+            border: border ??
+                Border.all(color: Colors.white.withOpacity(0.18), width: 1),
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Screen
+// ─────────────────────────────────────────────────────────────
 
 class EventsScreen extends StatefulWidget {
   final int initialTab;
@@ -43,6 +93,10 @@ class _EventsScreenState extends State<EventsScreen>
   DateTime? _selectedDay;
   Map<DateTime, List<EventModel>> _eventsMap = {};
 
+  // ── Search focus ──
+  final FocusNode _searchFocus = FocusNode();
+  bool _searchFocused = false;
+
   @override
   void initState() {
     super.initState();
@@ -53,6 +107,9 @@ class _EventsScreenState extends State<EventsScreen>
     if (_sessionService.isLoggedIn) {
       _loadBookmarkedEvents();
     }
+    _searchFocus.addListener(() {
+      setState(() => _searchFocused = _searchFocus.hasFocus);
+    });
   }
 
   @override
@@ -60,6 +117,7 @@ class _EventsScreenState extends State<EventsScreen>
     _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
     _searchController.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
@@ -73,17 +131,13 @@ class _EventsScreenState extends State<EventsScreen>
   }
 
   Future<void> _loadEvents() async {
-    setState(() {
-      _isLoading = true;
-    });
-
+    setState(() => _isLoading = true);
     final allEvents = await _supabaseService.getAllEvents();
-
     setState(() {
       _allEvents = allEvents;
       if (_sessionService.isLoggedIn) {
         _myEvents = allEvents
-            .where((event) => event.userId == _sessionService.currentUser?.id)
+            .where((e) => e.userId == _sessionService.currentUser?.id)
             .toList();
       } else {
         _myEvents = [];
@@ -96,12 +150,9 @@ class _EventsScreenState extends State<EventsScreen>
 
   Future<void> _loadBookmarkedEvents() async {
     if (!_sessionService.isLoggedIn) return;
-
     final bookmarked = await _supabaseService
         .getBookmarkedEvents(_sessionService.currentUser!.id);
-    setState(() {
-      _bookmarkedEvents = bookmarked;
-    });
+    setState(() => _bookmarkedEvents = bookmarked);
   }
 
   void _buildEventsMap() {
@@ -110,14 +161,10 @@ class _EventsScreenState extends State<EventsScreen>
       try {
         final date = DateTime.parse(event.date);
         final key = DateTime(date.year, date.month, date.day);
-        if (_eventsMap.containsKey(key)) {
-          _eventsMap[key]!.add(event);
-        } else {
-          _eventsMap[key] = [event];
-        }
-      } catch (e) {
-        print('Error parsing date for event: ${event.title}');
-      }
+        _eventsMap.containsKey(key)
+            ? _eventsMap[key]!.add(event)
+            : _eventsMap[key] = [event];
+      } catch (_) {}
     }
   }
 
@@ -127,31 +174,27 @@ class _EventsScreenState extends State<EventsScreen>
 
     if (_searchQuery.isNotEmpty) {
       filteredMy = filteredMy
-          .where((event) =>
-              event.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-              event.location.toLowerCase().contains(_searchQuery.toLowerCase()))
+          .where((e) =>
+              e.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+              e.location.toLowerCase().contains(_searchQuery.toLowerCase()))
           .toList();
       filteredAll = filteredAll
-          .where((event) =>
-              event.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-              event.location.toLowerCase().contains(_searchQuery.toLowerCase()))
+          .where((e) =>
+              e.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+              e.location.toLowerCase().contains(_searchQuery.toLowerCase()))
           .toList();
     }
 
     if (_selectedStatus != null) {
-      filteredMy =
-          filteredMy.where((event) => _checkStatusFilter(event)).toList();
-      filteredAll =
-          filteredAll.where((event) => _checkStatusFilter(event)).toList();
+      filteredMy = filteredMy.where(_checkStatusFilter).toList();
+      filteredAll = filteredAll.where(_checkStatusFilter).toList();
     }
 
     if (_selectedCategory != null) {
-      filteredMy = filteredMy
-          .where((event) => event.category == _selectedCategory)
-          .toList();
-      filteredAll = filteredAll
-          .where((event) => event.category == _selectedCategory)
-          .toList();
+      filteredMy =
+          filteredMy.where((e) => e.category == _selectedCategory).toList();
+      filteredAll =
+          filteredAll.where((e) => e.category == _selectedCategory).toList();
     }
 
     setState(() {
@@ -164,70 +207,57 @@ class _EventsScreenState extends State<EventsScreen>
   bool _checkStatusFilter(EventModel event) {
     try {
       final eventDate = DateTime.parse(event.date);
-      final currentDate = DateTime.now();
-      final nextDay = currentDate.add(const Duration(days: 1));
+      final now = DateTime.now();
+      final tomorrow = now.add(const Duration(days: 1));
 
       switch (_selectedStatus) {
         case 'active':
-          if (eventDate.year == currentDate.year &&
-              eventDate.month == currentDate.month &&
-              eventDate.day == currentDate.day) {
+          if (eventDate.year == now.year &&
+              eventDate.month == now.month &&
+              eventDate.day == now.day) {
             try {
-              final timeStr = event.time.toLowerCase();
-              bool isPM = timeStr.contains('pm');
-              final timeParts =
-                  timeStr.replaceAll(RegExp(r'[apm]'), '').trim().split(':');
-              int hour = int.parse(timeParts[0]);
-              final minute = int.parse(timeParts[1]);
-
-              if (isPM && hour != 12) hour += 12;
-              if (!isPM && hour == 12) hour = 0;
-
-              final eventDateTime = DateTime(
-                  eventDate.year, eventDate.month, eventDate.day, hour, minute);
-              return eventDateTime.isAfter(DateTime.now());
-            } catch (e) {
+              final ts = event.time.toLowerCase();
+              final isPM = ts.contains('pm');
+              final parts =
+                  ts.replaceAll(RegExp(r'[apm]'), '').trim().split(':');
+              int h = int.parse(parts[0]);
+              final m = int.parse(parts[1]);
+              if (isPM && h != 12) h += 12;
+              if (!isPM && h == 12) h = 0;
+              return DateTime(
+                      eventDate.year, eventDate.month, eventDate.day, h, m)
+                  .isAfter(now);
+            } catch (_) {
               return false;
             }
           }
           return false;
-
         case 'today':
-          return eventDate.year == currentDate.year &&
-              eventDate.month == currentDate.month &&
-              eventDate.day == currentDate.day;
-
+          return eventDate.year == now.year &&
+              eventDate.month == now.month &&
+              eventDate.day == now.day;
         case 'tomorrow':
-          return eventDate.year == nextDay.year &&
-              eventDate.month == nextDay.month &&
-              eventDate.day == nextDay.day;
-
+          return eventDate.year == tomorrow.year &&
+              eventDate.month == tomorrow.month &&
+              eventDate.day == tomorrow.day;
         default:
           return true;
       }
-    } catch (e) {
+    } catch (_) {
       return false;
     }
   }
 
   void _applyStatusFilter(String? status) {
     setState(() {
-      if (_selectedStatus == status) {
-        _selectedStatus = null;
-      } else {
-        _selectedStatus = status;
-      }
+      _selectedStatus = _selectedStatus == status ? null : status;
       _applyFilters();
     });
   }
 
   void _applyCategoryFilter(String? category) {
     setState(() {
-      if (_selectedCategory == category) {
-        _selectedCategory = null;
-      } else {
-        _selectedCategory = category;
-      }
+      _selectedCategory = _selectedCategory == category ? null : category;
       _applyFilters();
     });
   }
@@ -249,35 +279,32 @@ class _EventsScreenState extends State<EventsScreen>
     });
   }
 
-  List<EventModel> _getEventsForDay(DateTime day) {
-    final key = DateTime(day.year, day.month, day.day);
-    return _eventsMap[key] ?? [];
-  }
+  List<EventModel> _getEventsForDay(DateTime day) =>
+      _eventsMap[DateTime(day.year, day.month, day.day)] ?? [];
 
   Future<void> _editEvent(EventModel event) async {
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => CreateEventScreen(
+        builder: (_) => CreateEventScreen(
           userId: _sessionService.currentUser!.id,
           userFirstName: _sessionService.currentUser!.firstName,
           editEvent: event,
         ),
       ),
     );
-
     if (result == true) {
       _loadEvents();
-      if (_tabController.index == 2) {
-        _loadBookmarkedEvents();
-      }
+      if (_tabController.index == 2) _loadBookmarkedEvents();
     }
   }
 
   Future<void> _deleteEvent(String eventId) async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (_) => AlertDialog(
+        backgroundColor: Colors.white.withOpacity(0.90),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Delete Event',
             style: TextStyle(color: AppTheme.textPrimary)),
         content: const Text('Are you sure you want to delete this event?'),
@@ -295,21 +322,16 @@ class _EventsScreenState extends State<EventsScreen>
         ],
       ),
     );
-
     if (confirm == true) {
-      final success = await _supabaseService.deleteEvent(eventId);
-      if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Event deleted successfully')),
-        );
+      final ok = await _supabaseService.deleteEvent(eventId);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(
+                ok ? 'Event deleted successfully' : 'Failed to delete event')),
+      );
+      if (ok) {
         _loadEvents();
-        if (_tabController.index == 2) {
-          _loadBookmarkedEvents();
-        }
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to delete event')),
-        );
+        if (_tabController.index == 2) _loadBookmarkedEvents();
       }
     }
   }
@@ -326,86 +348,312 @@ class _EventsScreenState extends State<EventsScreen>
     );
   }
 
+  bool get _hasActiveFilters =>
+      _selectedCategory != null ||
+      _selectedStatus != null ||
+      _searchQuery.isNotEmpty;
+
+  // ─────────────────────────────────────────────
+  // BUILD ROOT
+  // ─────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.background,
-      appBar: AppBar(
-        title: const Text(
-          'Events',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-        ),
-        backgroundColor: AppTheme.primary,
-        elevation: 0,
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: AppTheme.accent,
-          unselectedLabelColor: Colors.white.withOpacity(0.7),
-          indicatorColor: AppTheme.accent,
-          tabs: const [
-            Tab(text: 'My Events'),
-            Tab(text: 'All Events'),
-            Tab(text: 'Bookmarks'),
-          ],
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: [
-          if (_tabController.index == 1)
-            IconButton(
-              icon: Icon(
-                _isCalendarView ? Icons.view_list : Icons.calendar_month,
-                color: Colors.white,
-              ),
-              onPressed: () {
-                setState(() {
-                  _isCalendarView = !_isCalendarView;
-                });
-              },
+      body: Stack(
+        children: [
+          // ── Ambient blobs (same as HomeScreen) ──
+          _buildAmbientBlobs(),
+
+          SafeArea(
+            child: Column(
+              children: [
+                // ── Glass header ──
+                _buildGlassHeader(),
+
+                // ── Search + filters ──
+                _buildSearchBar(),
+                _buildStatusFilterChips(),
+                _buildCategoryFilterChips(),
+
+                // ── Content ──
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildEventsList(_filteredMyEvents, isMyEvents: true),
+                      _isCalendarView
+                          ? _buildCalendarView()
+                          : _buildEventsList(_filteredAllEvents,
+                              isMyEvents: false),
+                      _buildBookmarksList(),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          if (_selectedCategory != null ||
-              _selectedStatus != null ||
-              _searchQuery.isNotEmpty)
-            TextButton(
-              onPressed: _clearAllFilters,
-              style: TextButton.styleFrom(foregroundColor: AppTheme.accent),
-              child: const Text('Clear All'),
-            ),
+          ),
         ],
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // AMBIENT BLOBS
+  // ─────────────────────────────────────────────
+
+  Widget _buildAmbientBlobs() {
+    return Stack(
+      children: [
+        Positioned(
+          top: -60,
+          left: -60,
+          child: Container(
+            width: 280,
+            height: 280,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppTheme.primary.withOpacity(0.12),
+            ),
+          ),
+        ),
+        Positioned(
+          top: 100,
+          right: -80,
+          child: Container(
+            width: 240,
+            height: 240,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppTheme.accent.withOpacity(0.10),
+            ),
+          ),
+        ),
+        Positioned(
+          bottom: -80,
+          left: 60,
+          child: Container(
+            width: 200,
+            height: 200,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppTheme.blobEmerald.withOpacity(0.08),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // GLASS HEADER  (mirrors HomeScreen._buildHeader)
+  // ─────────────────────────────────────────────
+
+  Widget _buildGlassHeader() {
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.55),
+            border: Border(
+              bottom: BorderSide(
+                color: Colors.white.withOpacity(0.35),
+                width: 1,
+              ),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // ── Title row ──
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+                child: Row(
+                  children: [
+                    // Back button
+                    _Glass(
+                      borderRadius: BorderRadius.circular(14),
+                      opacity: 0.55,
+                      tint: Colors.white,
+                      padding: EdgeInsets.zero,
+                      child: SizedBox(
+                        width: 44,
+                        height: 44,
+                        child: IconButton(
+                          icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                              size: 18),
+                          color: AppTheme.primary,
+                          padding: EdgeInsets.zero,
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+
+                    // Title
+                    const Expanded(
+                      child: Text(
+                        'Events',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.textPrimary,
+                          letterSpacing: -0.6,
+                        ),
+                      ),
+                    ),
+
+                    // Calendar toggle (tab 1 only)
+                    AnimatedOpacity(
+                      opacity: _tabController.index == 1 ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 200),
+                      child: _Glass(
+                        borderRadius: BorderRadius.circular(14),
+                        opacity: 0.55,
+                        tint: Colors.white,
+                        padding: EdgeInsets.zero,
+                        child: SizedBox(
+                          width: 44,
+                          height: 44,
+                          child: IconButton(
+                            icon: Icon(
+                              _isCalendarView
+                                  ? Icons.view_list_rounded
+                                  : Icons.calendar_month_rounded,
+                              size: 20,
+                            ),
+                            color: AppTheme.primary,
+                            padding: EdgeInsets.zero,
+                            onPressed: _tabController.index == 1
+                                ? () => setState(
+                                    () => _isCalendarView = !_isCalendarView)
+                                : null,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Clear filters
+                    if (_hasActiveFilters) ...[
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: _clearAllFilters,
+                        child: _Glass(
+                          borderRadius: BorderRadius.circular(20),
+                          opacity: 0.55,
+                          tint: AppTheme.error,
+                          border: Border.all(
+                              color: AppTheme.error.withOpacity(0.20),
+                              width: 1),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 7),
+                          child: const Text(
+                            'Clear All',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.error,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+
+              // ── Tab bar ──
+              TabBar(
+                controller: _tabController,
+                labelColor: AppTheme.primary,
+                unselectedLabelColor: AppTheme.textSecondary,
+                indicatorColor: AppTheme.primary,
+                dividerColor: Colors.transparent,
+                overlayColor: WidgetStateProperty.all(Colors.transparent),
+                labelStyle: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                ),
+                unselectedLabelStyle: const TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 14,
+                ),
+                tabs: const [
+                  Tab(text: 'My Events'),
+                  Tab(text: 'All Events'),
+                  Tab(text: 'Bookmarks'),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // SEARCH BAR
+  // ─────────────────────────────────────────────
+
+  Widget _buildSearchBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
             child: Container(
               decoration: BoxDecoration(
-                color: AppTheme.surface,
+                color: Colors.white.withOpacity(0.72),
                 borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: _searchFocused
+                      ? AppTheme.primary.withOpacity(0.45)
+                      : Colors.white.withOpacity(0.70),
+                  width: _searchFocused ? 1.5 : 1.2,
+                ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
-                    blurRadius: 12,
-                    offset: const Offset(0, 2),
+                    color: AppTheme.primary
+                        .withOpacity(_searchFocused ? 0.08 : 0.04),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
                   ),
                 ],
               ),
               child: TextField(
                 controller: _searchController,
+                focusNode: _searchFocus,
                 onChanged: (value) {
                   setState(() {
                     _searchQuery = value;
                     _applyFilters();
                   });
                 },
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: AppTheme.textPrimary,
+                ),
                 decoration: InputDecoration(
-                  hintText: 'Search events by title or location...',
-                  prefixIcon: Icon(Icons.search, color: AppTheme.primary),
+                  hintText: 'Search events by title or location…',
+                  hintStyle: TextStyle(
+                    color: AppTheme.textSecondary.withOpacity(0.65),
+                    fontSize: 14,
+                  ),
+                  prefixIcon: Icon(Icons.search_rounded,
+                      color: _searchFocused
+                          ? AppTheme.primary
+                          : AppTheme.textSecondary.withOpacity(0.6),
+                      size: 20),
                   suffixIcon: _searchQuery.isNotEmpty
                       ? IconButton(
-                          icon:
-                              Icon(Icons.clear, color: AppTheme.textSecondary),
+                          icon: Icon(Icons.cancel_rounded,
+                              color: AppTheme.textSecondary.withOpacity(0.6),
+                              size: 18),
                           onPressed: () {
                             setState(() {
                               _searchQuery = '';
@@ -415,186 +663,257 @@ class _EventsScreenState extends State<EventsScreen>
                           },
                         )
                       : null,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(20),
-                    borderSide: BorderSide.none,
-                  ),
-                  filled: true,
-                  fillColor: AppTheme.surface,
+                  border: InputBorder.none,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 ),
               ),
             ),
           ),
-          _buildStatusFilterChips(),
-          _buildCategoryFilterChips(),
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildEventsList(_filteredMyEvents, isMyEvents: true),
-                _isCalendarView
-                    ? _buildCalendarView()
-                    : _buildEventsList(_filteredAllEvents, isMyEvents: false),
-                _buildBookmarksList(),
-              ],
+        ),
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // FILTER CHIPS (glass style)
+  // ─────────────────────────────────────────────
+
+  Widget _buildStatusFilterChips() {
+    const statuses = [
+      {'label': 'All', 'value': null},
+      {'label': 'Active', 'value': 'active'},
+      {'label': 'Today', 'value': 'today'},
+      {'label': 'Tomorrow', 'value': 'tomorrow'},
+    ];
+
+    return SizedBox(
+      height: 44,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+        children: statuses.map((s) {
+          final val = s['value'] as String?;
+          final selected = _selectedStatus == val;
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: _buildGlassChip(
+              label: s['label'] as String,
+              selected: selected,
+              onTap: () => _applyStatusFilter(val),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildCategoryFilterChips() {
+    return SizedBox(
+      height: 44,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: _buildGlassChip(
+              label: 'All',
+              selected: _selectedCategory == null,
+              onTap: () => _applyCategoryFilter(null),
             ),
           ),
+          ...AppConstants.eventCategories.map((cat) {
+            final selected = _selectedCategory == cat;
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: _buildGlassChip(
+                label: '${AppConstants.getCategoryIcon(cat)} $cat',
+                selected: selected,
+                onTap: () => _applyCategoryFilter(cat),
+              ),
+            );
+          }),
         ],
       ),
     );
   }
 
+  Widget _buildGlassChip({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            decoration: BoxDecoration(
+              color: selected
+                  ? AppTheme.primary.withOpacity(0.88)
+                  : Colors.white.withOpacity(0.65),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: selected
+                    ? AppTheme.primary.withOpacity(0.40)
+                    : Colors.white.withOpacity(0.70),
+                width: 1.2,
+              ),
+              boxShadow: selected
+                  ? [
+                      BoxShadow(
+                        color: AppTheme.primary.withOpacity(0.20),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
+                      )
+                    ]
+                  : [],
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: selected ? Colors.white : AppTheme.textPrimary,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // CALENDAR VIEW
+  // ─────────────────────────────────────────────
+
   Widget _buildCalendarView() {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    if (_isLoading) return _buildLoader();
 
     return Column(
       children: [
-        TableCalendar(
-          firstDay: DateTime.now().subtract(const Duration(days: 365)),
-          lastDay: DateTime.now().add(const Duration(days: 365)),
-          focusedDay: _focusedDay,
-          selectedDayPredicate: (day) {
-            return _selectedDay != null &&
-                day.year == _selectedDay!.year &&
-                day.month == _selectedDay!.month &&
-                day.day == _selectedDay!.day;
-          },
-          onDaySelected: _onDaySelected,
-          calendarFormat: CalendarFormat.month,
-          eventLoader: _getEventsForDay,
-          calendarStyle: CalendarStyle(
-            todayDecoration: BoxDecoration(
-              color: AppTheme.primary.withOpacity(0.2),
-              shape: BoxShape.circle,
+        ClipRRect(
+          borderRadius:
+              const BorderRadius.vertical(bottom: Radius.circular(20)),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+            child: Container(
+              margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.65),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                    color: Colors.white.withOpacity(0.70), width: 1.2),
+              ),
+              child: TableCalendar(
+                firstDay: DateTime.now().subtract(const Duration(days: 365)),
+                lastDay: DateTime.now().add(const Duration(days: 365)),
+                focusedDay: _focusedDay,
+                selectedDayPredicate: (day) =>
+                    _selectedDay != null &&
+                    day.year == _selectedDay!.year &&
+                    day.month == _selectedDay!.month &&
+                    day.day == _selectedDay!.day,
+                onDaySelected: _onDaySelected,
+                calendarFormat: CalendarFormat.month,
+                eventLoader: _getEventsForDay,
+                calendarStyle: CalendarStyle(
+                  todayDecoration: BoxDecoration(
+                    color: AppTheme.primary.withOpacity(0.18),
+                    shape: BoxShape.circle,
+                  ),
+                  selectedDecoration: const BoxDecoration(
+                    color: AppTheme.primary,
+                    shape: BoxShape.circle,
+                  ),
+                  weekendTextStyle: const TextStyle(color: AppTheme.error),
+                  markerDecoration: const BoxDecoration(
+                    color: AppTheme.accent,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                headerStyle: HeaderStyle(
+                  titleCentered: true,
+                  formatButtonVisible: false,
+                  titleTextStyle: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  leftChevronIcon:
+                      const Icon(Icons.chevron_left, color: AppTheme.primary),
+                  rightChevronIcon:
+                      const Icon(Icons.chevron_right, color: AppTheme.primary),
+                  decoration: const BoxDecoration(
+                    borderRadius:
+                        BorderRadius.vertical(top: Radius.circular(20)),
+                  ),
+                ),
+                daysOfWeekStyle: DaysOfWeekStyle(
+                  weekdayStyle: const TextStyle(color: AppTheme.textSecondary),
+                  weekendStyle: const TextStyle(color: AppTheme.error),
+                ),
+              ),
             ),
-            selectedDecoration: BoxDecoration(
-              color: AppTheme.primary,
-              shape: BoxShape.circle,
-            ),
-            weekendTextStyle: const TextStyle(color: AppTheme.error),
-            markerDecoration: BoxDecoration(
-              color: AppTheme.accent,
-              shape: BoxShape.circle,
-            ),
-          ),
-          headerStyle: HeaderStyle(
-            titleCentered: true,
-            formatButtonVisible: false,
-            titleTextStyle: const TextStyle(
-              color: AppTheme.textPrimary,
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-            ),
-            leftChevronIcon: Icon(Icons.chevron_left, color: AppTheme.primary),
-            rightChevronIcon:
-                Icon(Icons.chevron_right, color: AppTheme.primary),
-          ),
-          daysOfWeekStyle: DaysOfWeekStyle(
-            weekdayStyle: TextStyle(color: AppTheme.textSecondary),
-            weekendStyle: const TextStyle(color: AppTheme.error),
           ),
         ),
-        const SizedBox(height: 16),
-        if (_selectedDay != null)
+        if (_selectedDay != null) ...[
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                const Icon(Icons.event_rounded,
+                    size: 16, color: AppTheme.primary),
+                const SizedBox(width: 6),
+                Text(
+                  DateFormat('MMMM d, yyyy').format(_selectedDay!),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
           Expanded(
             child: _buildEventsList(_getEventsForDay(_selectedDay!),
                 isMyEvents: false),
           ),
+        ],
       ],
     );
   }
 
+  // ─────────────────────────────────────────────
+  // EVENTS LIST
+  // ─────────────────────────────────────────────
+
   Widget _buildEventsList(List<EventModel> events, {required bool isMyEvents}) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    if (_isLoading) return _buildLoader();
 
     if (!_sessionService.isLoggedIn && isMyEvents) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.lock_outline,
-              size: 64,
-              color: AppTheme.textSecondary.withOpacity(0.4),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Login to view your events',
-              style: TextStyle(
-                fontSize: 16,
-                color: AppTheme.textSecondary,
-              ),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () async {
-                await Navigator.pushNamed(context, '/login');
-                _loadEvents();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primary,
-              ),
-              child: const Text('Login Now'),
-            ),
-          ],
-        ),
+      return _buildAuthPrompt(
+        icon: Icons.lock_outline_rounded,
+        message: 'Login to view your events',
+        onLogin: () async {
+          await Navigator.pushNamed(context, '/login');
+          _loadEvents();
+        },
       );
     }
 
     if (events.isEmpty) {
-      String message;
-      if (isMyEvents) {
-        if (_selectedCategory != null && _selectedStatus != null) {
-          message =
-              'No events found for $_selectedCategory category and ${_selectedStatus!.toUpperCase()} status';
-        } else if (_selectedCategory != null) {
-          message = 'No events found in "$_selectedCategory" category';
-        } else if (_selectedStatus != null) {
-          message = 'No ${_selectedStatus!.toUpperCase()} events found';
-        } else if (_searchQuery.isNotEmpty) {
-          message = 'No events found for "$_searchQuery"';
-        } else {
-          message = 'No events created yet';
-        }
-      } else {
-        if (_selectedCategory != null && _selectedStatus != null) {
-          message =
-              'No events found for $_selectedCategory category and ${_selectedStatus!.toUpperCase()} status';
-        } else if (_selectedCategory != null) {
-          message = 'No events found in "$_selectedCategory" category';
-        } else if (_selectedStatus != null) {
-          message = 'No ${_selectedStatus!.toUpperCase()} events found';
-        } else if (_searchQuery.isNotEmpty) {
-          message = 'No events found for "$_searchQuery"';
-        } else {
-          message = 'No events available';
-        }
-      }
-
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.event_busy,
-              size: 64,
-              color: AppTheme.textSecondary.withOpacity(0.4),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              message,
-              style: TextStyle(
-                fontSize: 16,
-                color: AppTheme.textSecondary,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
+      final message = _buildEmptyMessage(isMyEvents: isMyEvents);
+      return _buildEmptyState(
+        icon: Icons.event_busy_rounded,
+        message: message,
       );
     }
 
@@ -602,7 +921,7 @@ class _EventsScreenState extends State<EventsScreen>
       onRefresh: _loadEvents,
       color: AppTheme.accent,
       child: ListView.builder(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         itemCount: events.length,
         itemBuilder: (context, index) {
           final event = events[index];
@@ -616,12 +935,9 @@ class _EventsScreenState extends State<EventsScreen>
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => EventDetailsScreen(event: event),
-                ),
+                    builder: (_) => EventDetailsScreen(event: event)),
               ).then((_) {
-                if (_tabController.index == 2) {
-                  _loadBookmarkedEvents();
-                }
+                if (_tabController.index == 2) _loadBookmarkedEvents();
               });
             },
             onEdit: () => _editEvent(event),
@@ -633,69 +949,27 @@ class _EventsScreenState extends State<EventsScreen>
     );
   }
 
+  // ─────────────────────────────────────────────
+  // BOOKMARKS LIST
+  // ─────────────────────────────────────────────
+
   Widget _buildBookmarksList() {
     if (!_sessionService.isLoggedIn) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.bookmark_border,
-              size: 64,
-              color: AppTheme.textSecondary.withOpacity(0.4),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Login to bookmark events',
-              style: TextStyle(
-                fontSize: 16,
-                color: AppTheme.textSecondary,
-              ),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () async {
-                await Navigator.pushNamed(context, '/login');
-                _loadBookmarkedEvents();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primary,
-              ),
-              child: const Text('Login Now'),
-            ),
-          ],
-        ),
+      return _buildAuthPrompt(
+        icon: Icons.bookmark_border_rounded,
+        message: 'Login to bookmark events',
+        onLogin: () async {
+          await Navigator.pushNamed(context, '/login');
+          _loadBookmarkedEvents();
+        },
       );
     }
 
     if (_bookmarkedEvents.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.bookmark_border,
-              size: 64,
-              color: AppTheme.textSecondary.withOpacity(0.4),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No bookmarked events yet',
-              style: TextStyle(
-                fontSize: 16,
-                color: AppTheme.textSecondary,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Tap the bookmark icon on any event to save it here',
-              style: TextStyle(
-                fontSize: 12,
-                color: AppTheme.textSecondary.withOpacity(0.5),
-              ),
-            ),
-          ],
-        ),
+      return _buildEmptyState(
+        icon: Icons.bookmark_border_rounded,
+        message: 'No bookmarked events yet',
+        subtitle: 'Tap the bookmark icon on any event to save it here',
       );
     }
 
@@ -703,7 +977,7 @@ class _EventsScreenState extends State<EventsScreen>
       onRefresh: _loadBookmarkedEvents,
       color: AppTheme.accent,
       child: ListView.builder(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         itemCount: _bookmarkedEvents.length,
         itemBuilder: (context, index) {
           final event = _bookmarkedEvents[index];
@@ -717,11 +991,8 @@ class _EventsScreenState extends State<EventsScreen>
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => EventDetailsScreen(event: event),
-                ),
-              ).then((_) {
-                _loadBookmarkedEvents();
-              });
+                    builder: (_) => EventDetailsScreen(event: event)),
+              ).then((_) => _loadBookmarkedEvents());
             },
             onEdit: () => _editEvent(event),
             onDelete: () => _deleteEvent(event.id),
@@ -732,125 +1003,188 @@ class _EventsScreenState extends State<EventsScreen>
     );
   }
 
-  Widget _buildStatusFilterChips() {
-    return Container(
-      height: 45,
-      margin: const EdgeInsets.only(top: 8),
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        children: [
-          FilterChip(
-            label: const Text('All'),
-            selected: _selectedStatus == null,
-            onSelected: (_) => _applyStatusFilter(null),
-            backgroundColor: AppTheme.surface,
-            selectedColor: AppTheme.primary,
-            labelStyle: TextStyle(
-              color:
-                  _selectedStatus == null ? Colors.white : AppTheme.textPrimary,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(width: 8),
-          FilterChip(
-            label: const Text('Active'),
-            selected: _selectedStatus == 'active',
-            onSelected: (_) => _applyStatusFilter('active'),
-            backgroundColor: AppTheme.surface,
-            selectedColor: AppTheme.primary,
-            labelStyle: TextStyle(
-              color: _selectedStatus == 'active'
-                  ? Colors.white
-                  : AppTheme.textPrimary,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(width: 8),
-          FilterChip(
-            label: const Text('Today'),
-            selected: _selectedStatus == 'today',
-            onSelected: (_) => _applyStatusFilter('today'),
-            backgroundColor: AppTheme.surface,
-            selectedColor: AppTheme.primary,
-            labelStyle: TextStyle(
-              color: _selectedStatus == 'today'
-                  ? Colors.white
-                  : AppTheme.textPrimary,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(width: 8),
-          FilterChip(
-            label: const Text('Tomorrow'),
-            selected: _selectedStatus == 'tomorrow',
-            onSelected: (_) => _applyStatusFilter('tomorrow'),
-            backgroundColor: AppTheme.surface,
-            selectedColor: AppTheme.primary,
-            labelStyle: TextStyle(
-              color: _selectedStatus == 'tomorrow'
-                  ? Colors.white
-                  : AppTheme.textPrimary,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
+  // ─────────────────────────────────────────────
+  // SHARED EMPTY / LOADING HELPERS
+  // ─────────────────────────────────────────────
+
+  Widget _buildLoader() {
+    return Center(
+      child: _Glass(
+        borderRadius: BorderRadius.circular(20),
+        opacity: 0.55,
+        tint: Colors.white,
+        padding: const EdgeInsets.all(24),
+        child: const CircularProgressIndicator(
+          color: AppTheme.primary,
+          strokeWidth: 2.5,
+        ),
       ),
     );
   }
 
-  Widget _buildCategoryFilterChips() {
-    return Container(
-      height: 45,
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        children: [
-          FilterChip(
-            label: const Text('All'),
-            selected: _selectedCategory == null,
-            onSelected: (_) => _applyCategoryFilter(null),
-            backgroundColor: AppTheme.surface,
-            selectedColor: AppTheme.primary,
-            labelStyle: TextStyle(
-              color: _selectedCategory == null
-                  ? Colors.white
-                  : AppTheme.textPrimary,
-              fontWeight: FontWeight.w500,
+  Widget _buildEmptyState({
+    required IconData icon,
+    required String message,
+    String? subtitle,
+  }) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+            child: Container(
+              padding: const EdgeInsets.all(28),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.62),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                    color: Colors.white.withOpacity(0.70), width: 1.2),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withOpacity(0.08),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(icon,
+                        size: 36, color: AppTheme.primary.withOpacity(0.45)),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    message,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textPrimary,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.textSecondary.withOpacity(0.65),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
-          const SizedBox(width: 8),
-          ...AppConstants.eventCategories.map((category) {
-            return Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: FilterChip(
-                label: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      AppConstants.getCategoryIcon(category),
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(category),
-                  ],
-                ),
-                selected: _selectedCategory == category,
-                onSelected: (_) => _applyCategoryFilter(category),
-                backgroundColor: AppTheme.surface,
-                selectedColor: AppTheme.primary,
-                labelStyle: TextStyle(
-                  color: _selectedCategory == category
-                      ? Colors.white
-                      : AppTheme.textPrimary,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            );
-          }),
-        ],
+        ),
       ),
     );
+  }
+
+  Widget _buildAuthPrompt({
+    required IconData icon,
+    required String message,
+    required VoidCallback onLogin,
+  }) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+            child: Container(
+              padding: const EdgeInsets.all(28),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.62),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                    color: Colors.white.withOpacity(0.70), width: 1.2),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withOpacity(0.08),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(icon,
+                        size: 36, color: AppTheme.primary.withOpacity(0.45)),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    message,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textPrimary,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 20),
+                  GestureDetector(
+                    onTap: onLogin,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 28, vertical: 13),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primary.withOpacity(0.88),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                                color: AppTheme.primary.withOpacity(0.40),
+                                width: 1),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppTheme.primary.withOpacity(0.22),
+                                blurRadius: 16,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: const Text(
+                            'Login Now',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // EMPTY MESSAGE BUILDER
+  // ─────────────────────────────────────────────
+
+  String _buildEmptyMessage({required bool isMyEvents}) {
+    if (_selectedCategory != null && _selectedStatus != null) {
+      return 'No events found for $_selectedCategory and ${_selectedStatus!.toUpperCase()}';
+    } else if (_selectedCategory != null) {
+      return 'No events found in "$_selectedCategory"';
+    } else if (_selectedStatus != null) {
+      return 'No ${_selectedStatus!.toUpperCase()} events found';
+    } else if (_searchQuery.isNotEmpty) {
+      return 'No events found for "$_searchQuery"';
+    }
+    return isMyEvents ? 'No events created yet' : 'No events available';
   }
 }
