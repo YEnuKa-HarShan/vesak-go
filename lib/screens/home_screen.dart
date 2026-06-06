@@ -11,6 +11,7 @@ import 'create_event_screen.dart';
 import 'events_screen.dart';
 import 'profile_screen.dart';
 import 'map_screen.dart';
+import 'memories_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -21,8 +22,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final SupabaseService _supabaseService = SupabaseService();
-  final SessionService _sessionService =
-      SessionService(); // Fixed: Changed from SupabaseService to SessionService
+  final SessionService _sessionService = SessionService();
 
   bool _isLoading = true;
   int _eventsCount = 0;
@@ -147,11 +147,11 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.sand,
+      backgroundColor: AppTheme.background,
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _loadData,
-          color: AppTheme.gold,
+          color: AppTheme.accent,
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             child: Column(
@@ -213,11 +213,11 @@ class _HomeScreenState extends State<HomeScreen> {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [AppTheme.navy, AppTheme.maroon],
+          colors: [AppTheme.primary, AppTheme.accent],
         ),
         borderRadius: const BorderRadius.only(
-          bottomLeft: Radius.circular(24),
-          bottomRight: Radius.circular(24),
+          bottomLeft: Radius.circular(28),
+          bottomRight: Radius.circular(28),
         ),
       ),
       child: Padding(
@@ -227,6 +227,7 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             Row(
               children: [
+                // Avatar with XP ring
                 Container(
                   width: 60,
                   height: 60,
@@ -234,7 +235,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     shape: BoxShape.circle,
                     gradient: _sessionService.isLoggedIn
                         ? const LinearGradient(
-                            colors: [AppTheme.gold, AppTheme.saffron],
+                            colors: [AppTheme.accent, AppTheme.primary],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           )
@@ -244,7 +245,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     padding: const EdgeInsets.all(2),
                     child: Container(
                       decoration: const BoxDecoration(
-                        color: AppTheme.white,
+                        color: AppTheme.surface,
                         shape: BoxShape.circle,
                       ),
                       child: Center(
@@ -254,8 +255,8 @@ class _HomeScreenState extends State<HomeScreen> {
                               : 'G',
                           style: const TextStyle(
                             fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.charcoal,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.textPrimary,
                           ),
                         ),
                       ),
@@ -271,7 +272,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         '${_getGreeting()},',
                         style: TextStyle(
                           fontSize: 14,
-                          color: AppTheme.white.withOpacity(0.8),
+                          color: Colors.white.withOpacity(0.8),
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -281,23 +282,25 @@ class _HomeScreenState extends State<HomeScreen> {
                             : 'Guest User',
                         style: const TextStyle(
                           fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.white,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          letterSpacing: -0.5,
                         ),
                       ),
                     ],
                   ),
                 ),
+                // Notification Bell
                 Container(
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: AppTheme.white.withOpacity(0.1),
+                    color: Colors.white.withOpacity(0.15),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
                     Icons.notifications_none,
-                    color: AppTheme.white,
+                    color: Colors.white,
                     size: 20,
                   ),
                 ),
@@ -309,7 +312,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: AppTheme.white.withOpacity(0.2),
+                  color: Colors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(
@@ -326,7 +329,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           _sessionService.currentUser!.currentLevel),
                       style: const TextStyle(
                         fontSize: 12,
-                        color: AppTheme.white,
+                        color: Colors.white,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -335,7 +338,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       width: 4,
                       height: 4,
                       decoration: const BoxDecoration(
-                        color: AppTheme.white,
+                        color: Colors.white,
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -344,7 +347,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       'Level ${_sessionService.currentUser!.currentLevel}',
                       style: TextStyle(
                         fontSize: 12,
-                        color: AppTheme.white.withOpacity(0.8),
+                        color: Colors.white.withOpacity(0.8),
                       ),
                     ),
                   ],
@@ -379,12 +382,12 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppTheme.white,
-                borderRadius: BorderRadius.circular(16),
+                color: AppTheme.surface,
+                borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: AppTheme.charcoal.withOpacity(0.05),
-                    blurRadius: 10,
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 12,
                     offset: const Offset(0, 2),
                   ),
                 ],
@@ -393,13 +396,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Container(
                     padding: const EdgeInsets.all(10),
-                    decoration: const BoxDecoration(
-                      color: AppTheme.saffron,
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary,
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
                       Icons.event,
-                      color: AppTheme.white,
+                      color: Colors.white,
                       size: 20,
                     ),
                   ),
@@ -412,15 +415,15 @@ class _HomeScreenState extends State<HomeScreen> {
                           _eventsCount.toString(),
                           style: const TextStyle(
                             fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.charcoal,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.textPrimary,
                           ),
                         ),
                         Text(
                           'Events',
                           style: TextStyle(
                             fontSize: 12,
-                            color: AppTheme.charcoal.withOpacity(0.6),
+                            color: AppTheme.textSecondary,
                           ),
                         ),
                       ],
@@ -436,12 +439,12 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppTheme.white,
-              borderRadius: BorderRadius.circular(16),
+              color: AppTheme.surface,
+              borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
-                  color: AppTheme.charcoal.withOpacity(0.05),
-                  blurRadius: 10,
+                  color: Colors.black.withOpacity(0.04),
+                  blurRadius: 12,
                   offset: const Offset(0, 2),
                 ),
               ],
@@ -450,13 +453,13 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 Container(
                   padding: const EdgeInsets.all(10),
-                  decoration: const BoxDecoration(
-                    color: AppTheme.forestGreen,
+                  decoration: BoxDecoration(
+                    color: AppTheme.accent,
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
                     Icons.auto_stories,
-                    color: AppTheme.white,
+                    color: Colors.white,
                     size: 20,
                   ),
                 ),
@@ -469,15 +472,15 @@ class _HomeScreenState extends State<HomeScreen> {
                         _storiesCount.toString(),
                         style: const TextStyle(
                           fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.charcoal,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.textPrimary,
                         ),
                       ),
                       Text(
                         'Stories',
                         style: TextStyle(
                           fontSize: 12,
-                          color: AppTheme.charcoal.withOpacity(0.6),
+                          color: AppTheme.textSecondary,
                         ),
                       ),
                     ],
@@ -502,13 +505,23 @@ class _HomeScreenState extends State<HomeScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.lotusPink.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.lotusPink, width: 1),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.accent.withOpacity(0.15),
+            AppTheme.primary.withOpacity(0.1),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: AppTheme.accent.withOpacity(0.2),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.charcoal.withOpacity(0.05),
-            blurRadius: 10,
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
             offset: const Offset(0, 2),
           ),
         ],
@@ -521,12 +534,12 @@ class _HomeScreenState extends State<HomeScreen> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: AppTheme.gold,
-                  borderRadius: BorderRadius.circular(10),
+                  color: AppTheme.accent,
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
                   Icons.emoji_events,
-                  color: AppTheme.white,
+                  color: Colors.white,
                   size: 16,
                 ),
               ),
@@ -535,8 +548,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 'Your Progress',
                 style: TextStyle(
                   fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.charcoal,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textPrimary,
                 ),
               ),
               const Spacer(),
@@ -544,7 +557,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 '$currentXp / $nextLevelXp XP',
                 style: TextStyle(
                   fontSize: 11,
-                  color: AppTheme.charcoal.withOpacity(0.6),
+                  color: AppTheme.textSecondary,
                 ),
               ),
             ],
@@ -554,9 +567,9 @@ class _HomeScreenState extends State<HomeScreen> {
             borderRadius: BorderRadius.circular(8),
             child: LinearProgressIndicator(
               value: progress,
-              backgroundColor: AppTheme.sand,
-              color: AppTheme.gold,
-              minHeight: 8,
+              backgroundColor: AppTheme.timelineInactive,
+              color: AppTheme.accent,
+              minHeight: 6,
             ),
           ),
           const SizedBox(height: 8),
@@ -566,22 +579,22 @@ class _HomeScreenState extends State<HomeScreen> {
                 '${(progress * 100).toInt()}% to Level ${currentLevel + 1}',
                 style: TextStyle(
                   fontSize: 11,
-                  color: AppTheme.charcoal.withOpacity(0.6),
+                  color: AppTheme.textSecondary,
                 ),
               ),
               const Spacer(),
               Text(
                 '${xpNeeded} XP needed',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w500,
-                  color: AppTheme.saffron,
+                  color: AppTheme.primary,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          Divider(color: AppTheme.sand, height: 1),
+          Divider(color: AppTheme.timelineInactive, height: 1),
           const SizedBox(height: 12),
           Row(
             children: [
@@ -603,10 +616,17 @@ class _HomeScreenState extends State<HomeScreen> {
           Container(
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: AppTheme.white,
+              color: AppTheme.surface,
               borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.04),
+                  blurRadius: 4,
+                  offset: const Offset(0, 1),
+                ),
+              ],
             ),
-            child: Icon(icon, size: 14, color: AppTheme.saffron),
+            child: Icon(icon, size: 14, color: AppTheme.primary),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -618,14 +638,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
-                    color: AppTheme.charcoal,
+                    color: AppTheme.textPrimary,
                   ),
                 ),
                 Text(
                   reward,
                   style: TextStyle(
                     fontSize: 10,
-                    color: AppTheme.charcoal.withOpacity(0.6),
+                    color: AppTheme.textSecondary,
                   ),
                 ),
               ],
@@ -644,11 +664,12 @@ class _HomeScreenState extends State<HomeScreen> {
           'Quick Actions',
           style: TextStyle(
             fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: AppTheme.charcoal,
+            fontWeight: FontWeight.w700,
+            color: AppTheme.textPrimary,
+            letterSpacing: -0.3,
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
         GridView.count(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -661,7 +682,7 @@ class _HomeScreenState extends State<HomeScreen> {
               title: 'Create',
               icon: Icons.add_circle_outline,
               onTap: _handleCreateEvent,
-              color: AppTheme.lotusPink,
+              color: AppTheme.primary.withOpacity(0.1),
             ),
             _buildActionGridItem(
               title: 'Events',
@@ -672,7 +693,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   MaterialPageRoute(builder: (context) => const EventsScreen()),
                 );
               },
-              color: AppTheme.forestGreen.withOpacity(0.2),
+              color: AppTheme.primary.withOpacity(0.1),
             ),
             _buildActionGridItem(
               title: 'Map',
@@ -683,7 +704,19 @@ class _HomeScreenState extends State<HomeScreen> {
                   MaterialPageRoute(builder: (context) => const MapScreen()),
                 );
               },
-              color: AppTheme.saffron.withOpacity(0.2),
+              color: AppTheme.primary.withOpacity(0.1),
+            ),
+            _buildActionGridItem(
+              title: 'Memories',
+              icon: Icons.memory,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) => const MemoriesScreen()),
+                );
+              },
+              color: AppTheme.accent.withOpacity(0.1),
             ),
             _buildActionGridItem(
               title: 'Profile',
@@ -695,7 +728,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       builder: (context) => const ProfileScreen()),
                 );
               },
-              color: AppTheme.navy.withOpacity(0.2),
+              color: AppTheme.primary.withOpacity(0.1),
             ),
             _buildActionGridItem(
               title: 'Bookmarks',
@@ -707,7 +740,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       builder: (context) => const EventsScreen(initialTab: 2)),
                 );
               },
-              color: AppTheme.gold.withOpacity(0.2),
+              color: AppTheme.accent.withOpacity(0.1),
             ),
             if (!_sessionService.isLoggedIn)
               _buildActionGridItem(
@@ -720,7 +753,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         builder: (context) => const LoginScreen()),
                   );
                 },
-                color: AppTheme.maroon.withOpacity(0.2),
+                color: AppTheme.error.withOpacity(0.1),
               ),
           ],
         ),
@@ -736,14 +769,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
         decoration: BoxDecoration(
           color: color,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: AppTheme.charcoal.withOpacity(0.05),
-              blurRadius: 5,
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 8,
               offset: const Offset(0, 1),
             ),
           ],
@@ -753,11 +787,18 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: const BoxDecoration(
-                color: AppTheme.white,
+              decoration: BoxDecoration(
+                color: AppTheme.surface,
                 shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
               ),
-              child: Icon(icon, size: 24, color: AppTheme.charcoal),
+              child: Icon(icon, size: 24, color: AppTheme.primary),
             ),
             const SizedBox(height: 8),
             Text(
@@ -765,7 +806,7 @@ class _HomeScreenState extends State<HomeScreen> {
               style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
-                color: AppTheme.charcoal,
+                color: AppTheme.textPrimary,
               ),
             ),
           ],
@@ -782,8 +823,9 @@ class _HomeScreenState extends State<HomeScreen> {
           'Featured Events',
           style: TextStyle(
             fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: AppTheme.charcoal,
+            fontWeight: FontWeight.w700,
+            color: AppTheme.textPrimary,
+            letterSpacing: -0.3,
           ),
         ),
         TextButton(
@@ -793,10 +835,10 @@ class _HomeScreenState extends State<HomeScreen> {
               MaterialPageRoute(builder: (context) => const EventsScreen()),
             );
           },
-          child: const Text(
-            'View All',
-            style: TextStyle(color: AppTheme.saffron),
+          style: TextButton.styleFrom(
+            foregroundColor: AppTheme.primary,
           ),
+          child: const Text('View All'),
         ),
       ],
     );
@@ -842,28 +884,28 @@ class _HomeScreenState extends State<HomeScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.sand, width: 1),
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.charcoal.withOpacity(0.05),
-            blurRadius: 10,
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
             offset: const Offset(0, 2),
           ),
         ],
       ),
       child: Row(
         children: [
-          const Icon(Icons.format_quote, size: 24, color: AppTheme.gold),
+          const Icon(Icons.format_quote, size: 24, color: AppTheme.accent),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               quotes[randomIndex],
               style: const TextStyle(
                 fontSize: 13,
-                color: AppTheme.charcoal,
+                color: AppTheme.textPrimary,
                 fontStyle: FontStyle.italic,
+                height: 1.4,
               ),
             ),
           ),
@@ -880,8 +922,9 @@ class _HomeScreenState extends State<HomeScreen> {
           'Upcoming Events',
           style: TextStyle(
             fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: AppTheme.charcoal,
+            fontWeight: FontWeight.w700,
+            color: AppTheme.textPrimary,
+            letterSpacing: -0.3,
           ),
         ),
         TextButton(
@@ -891,10 +934,10 @@ class _HomeScreenState extends State<HomeScreen> {
               MaterialPageRoute(builder: (context) => const EventsScreen()),
             );
           },
-          child: const Text(
-            'View All',
-            style: TextStyle(color: AppTheme.saffron),
+          style: TextButton.styleFrom(
+            foregroundColor: AppTheme.primary,
           ),
+          child: const Text('View All'),
         ),
       ],
     );
@@ -914,13 +957,12 @@ class _HomeScreenState extends State<HomeScreen> {
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: AppTheme.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppTheme.sand, width: 1),
+            color: AppTheme.surface,
+            borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: AppTheme.charcoal.withOpacity(0.05),
-                blurRadius: 5,
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 8,
                 offset: const Offset(0, 1),
               ),
             ],
@@ -950,8 +992,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       event.title,
                       style: const TextStyle(
                         fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.charcoal,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -961,7 +1003,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       '${event.date} at ${event.time}',
                       style: TextStyle(
                         fontSize: 11,
-                        color: AppTheme.charcoal.withOpacity(0.6),
+                        color: AppTheme.textSecondary,
                       ),
                     ),
                   ],
@@ -973,14 +1015,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: AppTheme.saffron,
+                    color: AppTheme.primary,
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: const Text(
                     'Details',
                     style: TextStyle(
                       fontSize: 11,
-                      color: AppTheme.white,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ),
@@ -995,9 +1038,9 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showEventDetails(EventModel event) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppTheme.white,
+      backgroundColor: AppTheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) => Container(
         padding: const EdgeInsets.all(20),
@@ -1009,97 +1052,78 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 Text(
                   event.getMarkerIcon(),
-                  style: const TextStyle(fontSize: 24),
+                  style: const TextStyle(fontSize: 28),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     event.title,
                     style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.charcoal),
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textPrimary,
+                    ),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 12),
-            Text(
-              event.getCategoryDisplayName(),
-              style: TextStyle(
-                  fontSize: 14,
-                  color: AppConstants.getCategoryColor(event.category)),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppConstants.getCategoryColor(event.category)
+                    .withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                event.getCategoryDisplayName(),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppConstants.getCategoryColor(event.category),
+                ),
+              ),
             ),
             if (event.category == 'දන්සල' && event.foodType != 'none')
               Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  'Food: ${event.foodType}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppTheme.charcoal.withOpacity(0.6),
-                  ),
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(
+                  children: [
+                    const Icon(Icons.restaurant,
+                        size: 14, color: AppTheme.textSecondary),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Food: ${event.foodType}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
                 ),
               ),
+            const SizedBox(height: 12),
+            _buildDetailRow(Icons.calendar_today, event.date),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(Icons.calendar_today,
-                    size: 16, color: AppTheme.charcoal),
-                const SizedBox(width: 8),
-                Text(event.date,
-                    style: const TextStyle(
-                        fontSize: 14, color: AppTheme.charcoal)),
-              ],
-            ),
+            _buildDetailRow(Icons.access_time, event.time),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(Icons.access_time,
-                    size: 16, color: AppTheme.charcoal),
-                const SizedBox(width: 8),
-                Text(event.time,
-                    style: const TextStyle(
-                        fontSize: 14, color: AppTheme.charcoal)),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(Icons.location_on,
-                    size: 16, color: AppTheme.charcoal),
-                const SizedBox(width: 8),
-                Expanded(
-                    child: Text(event.location,
-                        style: const TextStyle(
-                            fontSize: 14, color: AppTheme.charcoal))),
-              ],
-            ),
+            _buildDetailRow(Icons.location_on, event.location,
+                isMultiline: true),
             if (event.description != null && event.description!.isNotEmpty)
-              Column(
-                children: [
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      const Icon(Icons.description,
-                          size: 16, color: AppTheme.charcoal),
-                      const SizedBox(width: 8),
-                      Expanded(
-                          child: Text(event.description!,
-                              style: const TextStyle(
-                                  fontSize: 14, color: AppTheme.charcoal))),
-                    ],
-                  ),
-                ],
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: _buildDetailRow(Icons.description, event.description!,
+                    isMultiline: true),
               ),
+            const SizedBox(height: 8),
+            _buildDetailRow(Icons.person, 'Created by: ${event.createdBy}'),
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: () => Navigator.pop(context),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.saffron,
-                  foregroundColor: AppTheme.white,
+                  backgroundColor: AppTheme.primary,
+                  foregroundColor: Colors.white,
                 ),
                 child: const Text('Close'),
               ),
@@ -1107,6 +1131,30 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildDetailRow(IconData icon, String text,
+      {bool isMultiline = false}) {
+    return Row(
+      crossAxisAlignment:
+          isMultiline ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+      children: [
+        Icon(icon, size: 16, color: AppTheme.textSecondary),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 13,
+              color: AppTheme.textSecondary,
+            ),
+            maxLines: isMultiline ? 3 : 1,
+            overflow:
+                isMultiline ? TextOverflow.ellipsis : TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
   }
 }

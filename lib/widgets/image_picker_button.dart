@@ -1,10 +1,11 @@
-import 'package:flutter/material.dart';
 import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../theme/app_theme.dart';
 
 class ImagePickerButton extends StatelessWidget {
   final File? selectedImage;
+  final String? existingImageUrl;
   final ValueChanged<File?> onImagePicked;
   final VoidCallback onRemoveImage;
   final double size;
@@ -12,9 +13,10 @@ class ImagePickerButton extends StatelessWidget {
   const ImagePickerButton({
     super.key,
     this.selectedImage,
+    this.existingImageUrl,
     required this.onImagePicked,
     required this.onRemoveImage,
-    this.size = 100,
+    this.size = 120,
   });
 
   Future<void> _pickImage(ImageSource source) async {
@@ -34,42 +36,69 @@ class ImagePickerButton extends StatelessWidget {
   void _showPickerOptions(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppTheme.white,
+      backgroundColor: AppTheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Select Image',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.charcoal,
+      builder: (context) => SafeArea(
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppTheme.timelineInactive,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
-            ),
-            const Divider(color: AppTheme.sand, height: 24),
-            ListTile(
-              leading: const Icon(Icons.camera_alt, color: AppTheme.saffron),
-              title: const Text('Take a photo'),
-              onTap: () {
-                Navigator.pop(context);
-                _pickImage(ImageSource.camera);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library, color: AppTheme.saffron),
-              title: const Text('Choose from gallery'),
-              onTap: () {
-                Navigator.pop(context);
-                _pickImage(ImageSource.gallery);
-              },
-            ),
-            const SizedBox(height: 20),
-          ],
+              const SizedBox(height: 20),
+              const Text(
+                'Select Image',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+              const Divider(color: AppTheme.timelineInactive, height: 24),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.camera_alt,
+                      size: 20, color: AppTheme.primary),
+                ),
+                title: const Text('Take a photo'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImage(ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.photo_library,
+                      size: 20, color: AppTheme.primary),
+                ),
+                title: const Text('Choose from gallery'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImage(ImageSource.gallery);
+                },
+              ),
+              const SizedBox(height: 12),
+            ],
+          ),
         ),
       ),
     );
@@ -77,57 +106,127 @@ class ImagePickerButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hasImage = selectedImage != null ||
+        (existingImageUrl != null && existingImageUrl!.isNotEmpty);
+
     return Column(
       children: [
         GestureDetector(
           onTap: () => _showPickerOptions(context),
-          child: Container(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
             width: size,
             height: size,
             decoration: BoxDecoration(
-              color: AppTheme.sand,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppTheme.saffron, width: 2),
+              color: AppTheme.surface,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: hasImage ? AppTheme.accent : AppTheme.primary,
+                width: hasImage ? 2 : 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
-            child: selectedImage != null
-                ? ClipRRect(
-                    borderRadius: BorderRadius.circular(14),
-                    child: Image.file(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  // Image Preview
+                  if (selectedImage != null)
+                    Image.file(
                       selectedImage!,
                       width: size,
                       height: size,
                       fit: BoxFit.cover,
+                    )
+                  else if (existingImageUrl != null &&
+                      existingImageUrl!.isNotEmpty)
+                    Image.network(
+                      existingImageUrl!,
+                      width: size,
+                      height: size,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) =>
+                          _buildPlaceholder(),
+                    )
+                  else
+                    _buildPlaceholder(),
+
+                  // Overlay with camera icon
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(20),
                     ),
-                  )
-                : Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.add_photo_alternate,
-                        size: 32,
-                        color: AppTheme.saffron,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Add Image',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppTheme.saffron,
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 4,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                        child: Icon(
+                          hasImage ? Icons.edit : Icons.add_a_photo,
+                          size: 20,
+                          color: AppTheme.primary,
                         ),
                       ),
-                    ],
+                    ),
                   ),
+                ],
+              ),
+            ),
           ),
         ),
-        if (selectedImage != null)
-          TextButton(
-            onPressed: onRemoveImage,
-            child: const Text(
-              'Remove Image',
-              style: TextStyle(color: AppTheme.maroon),
+        if (hasImage)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: TextButton(
+              onPressed: onRemoveImage,
+              style: TextButton.styleFrom(
+                foregroundColor: AppTheme.error,
+              ),
+              child: const Text('Remove Image'),
             ),
           ),
       ],
+    );
+  }
+
+  Widget _buildPlaceholder() {
+    return Container(
+      color: AppTheme.background,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.add_photo_alternate,
+            size: 32,
+            color: AppTheme.primary.withOpacity(0.5),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Add Image',
+            style: TextStyle(
+              fontSize: 12,
+              color: AppTheme.primary.withOpacity(0.5),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -48,6 +48,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   bool _isLoading = false;
   bool _isGettingLocation = false;
   bool _isEditMode = false;
+  int _currentStep = 0;
 
   @override
   void initState() {
@@ -114,8 +115,8 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
       builder: (context, child) {
         return Theme(
           data: ThemeData.light().copyWith(
-            primaryColor: AppTheme.saffron,
-            colorScheme: const ColorScheme.light(primary: AppTheme.saffron),
+            primaryColor: AppTheme.primary,
+            colorScheme: const ColorScheme.light(primary: AppTheme.primary),
             buttonTheme:
                 const ButtonThemeData(textTheme: ButtonTextTheme.primary),
           ),
@@ -138,8 +139,8 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
       builder: (context, child) {
         return Theme(
           data: ThemeData.light().copyWith(
-            primaryColor: AppTheme.saffron,
-            colorScheme: const ColorScheme.light(primary: AppTheme.saffron),
+            primaryColor: AppTheme.primary,
+            colorScheme: const ColorScheme.light(primary: AppTheme.primary),
           ),
           child: child!,
         );
@@ -153,50 +154,64 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
     }
   }
 
+  Future<void> _nextStep() {
+    if (_currentStep == 0) {
+      if (_selectedCategory == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select a category')),
+        );
+        return Future.value();
+      }
+      if (_selectedCategory == 'දන්සල' &&
+          (_selectedFoodType == null || _selectedFoodType == 'none')) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select food type for Dansala')),
+        );
+        return Future.value();
+      }
+      if (_titleController.text.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please enter event title')),
+        );
+        return Future.value();
+      }
+    }
+
+    if (_currentStep == 1) {
+      if (_selectedDate == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select event date')),
+        );
+        return Future.value();
+      }
+      if (_selectedTime == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select event time')),
+        );
+        return Future.value();
+      }
+      if (_locationController.text.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please enter event location')),
+        );
+        return Future.value();
+      }
+    }
+
+    setState(() {
+      _currentStep++;
+    });
+    return Future.value();
+  }
+
+  Future<void> _previousStep() {
+    setState(() {
+      _currentStep--;
+    });
+    return Future.value();
+  }
+
   Future<void> _handleSubmit() async {
-    if (_selectedCategory == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a category')),
-      );
-      return;
-    }
-
-    if (_selectedCategory == 'දන්සල' &&
-        (_selectedFoodType == null || _selectedFoodType == 'none')) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select food type for Dansala')),
-      );
-      return;
-    }
-
-    if (_titleController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter event title')),
-      );
-      return;
-    }
-
-    if (_selectedDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select event date')),
-      );
-      return;
-    }
-
-    if (_selectedTime == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select event time')),
-      );
-      return;
-    }
-
-    if (_locationController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter event location')),
-      );
-      return;
-    }
-
     setState(() {
       _isLoading = true;
     });
@@ -229,7 +244,6 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
     String imageUrl = _existingImageUrl ?? '';
     String imagePublicId = _existingImagePublicId ?? '';
 
-    // Upload new image if selected
     if (_selectedImage != null) {
       final eventId = _isEditMode
           ? widget.editEvent!.id
@@ -262,7 +276,6 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
         imagePublicId: imagePublicId,
       );
     } else {
-      final tempEventId = DateTime.now().millisecondsSinceEpoch.toString();
       success = await _supabaseService.createEvent(
         category: _selectedCategory!,
         title: _titleController.text,
@@ -314,378 +327,491 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.sand,
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
         title: Text(
           _isEditMode ? 'Edit Event' : 'Create Event',
-          style: const TextStyle(color: AppTheme.white),
+          style:
+              const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
         ),
-        backgroundColor: AppTheme.navy,
+        backgroundColor: AppTheme.primary,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppTheme.white),
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 20),
-            Center(
-              child: ImagePickerButton(
-                selectedImage: _selectedImage,
-                onImagePicked: (file) {
-                  setState(() {
-                    _selectedImage = file;
-                  });
-                },
-                onRemoveImage: () {
-                  setState(() {
-                    _selectedImage = null;
-                    _existingImageUrl = null;
-                    _existingImagePublicId = null;
-                  });
-                },
-                size: 120,
-              ),
+        actions: [
+          if (_currentStep > 0 && !_isLoading)
+            TextButton(
+              onPressed: _previousStep,
+              style: TextButton.styleFrom(foregroundColor: AppTheme.accent),
+              child: const Text('Back'),
             ),
-            if (_existingImageUrl != null &&
-                _existingImageUrl!.isNotEmpty &&
-                _selectedImage == null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Center(
-                  child: Text(
-                    'Current image will be kept',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: AppTheme.forestGreen,
+        ],
+      ),
+      body: Stepper(
+        currentStep: _currentStep,
+        onStepContinue: _currentStep == 2 ? _handleSubmit : _nextStep,
+        onStepCancel: _currentStep > 0 ? _previousStep : null,
+        controlsBuilder: (context, details) {
+          return Padding(
+            padding: const EdgeInsets.only(top: 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: details.onStepContinue,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    child: Text(
+                      _currentStep == 2
+                          ? (_isEditMode ? 'Update Event' : 'Create Event')
+                          : 'Next',
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w600),
                     ),
                   ),
                 ),
-              ),
-            const SizedBox(height: 20),
-            DropdownButtonFormField<String>(
-              value: _selectedCategory,
-              decoration: InputDecoration(
-                labelText: 'Category *',
-                labelStyle: const TextStyle(color: AppTheme.charcoal),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide:
-                      const BorderSide(color: AppTheme.saffron, width: 2),
-                ),
-              ),
-              items: AppConstants.eventCategories.map((category) {
-                return DropdownMenuItem(
-                  value: category,
-                  child: Row(
-                    children: [
-                      Text(
-                        AppConstants.getCategoryIcon(category),
-                        style: const TextStyle(fontSize: 20),
+                if (details.onStepCancel != null) const SizedBox(width: 12),
+                if (details.onStepCancel != null)
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: details.onStepCancel,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.textSecondary,
+                        side:
+                            const BorderSide(color: AppTheme.timelineInactive),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
                       ),
-                      const SizedBox(width: 12),
-                      Text(category),
+                      child: const Text('Back'),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
+        steps: [
+          // Step 1: Basic Info
+          Step(
+            title: const Text('Basic Info'),
+            subtitle: const Text('Category & Title'),
+            state: _currentStep > 0 ? StepState.complete : StepState.indexed,
+            isActive: _currentStep >= 0,
+            content: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Category Dropdown
+                DropdownButtonFormField<String>(
+                  value: _selectedCategory,
+                  decoration: InputDecoration(
+                    labelText: 'Category *',
+                    hintText: 'Select event category',
+                    prefixIcon: Icon(Icons.category, color: AppTheme.primary),
+                  ),
+                  items: AppConstants.eventCategories.map((category) {
+                    return DropdownMenuItem(
+                      value: category,
+                      child: Row(
+                        children: [
+                          Text(
+                            AppConstants.getCategoryIcon(category),
+                            style: const TextStyle(fontSize: 20),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(category),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedCategory = value;
+                      if (value != 'දන්සල') {
+                        _selectedFoodType = null;
+                      }
+                    });
+                  },
+                ),
+                const SizedBox(height: 16),
+
+                // Food Type (Visible only when Category is දන්සල)
+                if (_selectedCategory == 'දන්සල')
+                  Column(
+                    children: [
+                      DropdownButtonFormField<String>(
+                        value: _selectedFoodType,
+                        decoration: InputDecoration(
+                          labelText: 'Food Type *',
+                          hintText: 'Select food type for Dansala',
+                          prefixIcon:
+                              Icon(Icons.restaurant, color: AppTheme.primary),
+                        ),
+                        items: AppConstants.foodTypes.map((food) {
+                          return DropdownMenuItem(
+                            value: food['sinhala'],
+                            child: Row(
+                              children: [
+                                Text(
+                                  food['emoji']!,
+                                  style: const TextStyle(fontSize: 24),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        food['sinhala']!,
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      Text(
+                                        food['english']!,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: AppTheme.textSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedFoodType = value;
+                          });
+                        },
+                        // This ensures only Sinhala name is shown in the selected box
+                        selectedItemBuilder: (context) {
+                          return AppConstants.foodTypes.map((food) {
+                            return Row(
+                              children: [
+                                Text(
+                                  food['emoji']!,
+                                  style: const TextStyle(fontSize: 20),
+                                ),
+                                const SizedBox(width: 12),
+                                Text(food['sinhala']!),
+                              ],
+                            );
+                          }).toList();
+                        },
+                      ),
+                      const SizedBox(height: 16),
                     ],
                   ),
-                );
-              }).toList(),
-              onChanged: (value) {
-                setState(() {
-                  _selectedCategory = value;
-                  if (value != 'දන්සල') {
-                    _selectedFoodType = null;
-                  }
-                });
-              },
-              style: const TextStyle(color: AppTheme.charcoal),
-              dropdownColor: AppTheme.white,
-              icon: const Icon(Icons.arrow_drop_down, color: AppTheme.charcoal),
+
+                // Title
+                TextField(
+                  controller: _titleController,
+                  decoration: InputDecoration(
+                    labelText: 'Event Title *',
+                    hintText: 'e.g., Vesak Lantern Festival',
+                    prefixIcon: Icon(Icons.title, color: AppTheme.primary),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Description
+                TextField(
+                  controller: _descriptionController,
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    labelText: 'Description (Optional)',
+                    hintText: 'Tell people about your event...',
+                    prefixIcon:
+                        Icon(Icons.description, color: AppTheme.primary),
+                    alignLabelWithHint: true,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 20),
-            if (_selectedCategory == 'දන්සල')
-              Column(
-                children: [
-                  DropdownButtonFormField<String>(
-                    value: _selectedFoodType,
-                    decoration: InputDecoration(
-                      labelText: 'Food Type *',
-                      labelStyle: const TextStyle(color: AppTheme.charcoal),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+          ),
+
+          // Step 2: Date, Time & Location
+          Step(
+            title: const Text('Date & Location'),
+            subtitle: const Text('When and where'),
+            state: _currentStep > 1 ? StepState.complete : StepState.indexed,
+            isActive: _currentStep >= 1,
+            content: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Date Picker
+                GestureDetector(
+                  onTap: _selectDate,
+                  child: AbsorbPointer(
+                    child: TextField(
+                      controller: TextEditingController(
+                        text: _selectedDate != null
+                            ? DateFormat('EEEE, MMM d, yyyy')
+                                .format(_selectedDate!)
+                            : '',
                       ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide:
-                            const BorderSide(color: AppTheme.saffron, width: 2),
+                      decoration: InputDecoration(
+                        labelText: 'Date *',
+                        hintText: 'Select date',
+                        prefixIcon:
+                            Icon(Icons.calendar_today, color: AppTheme.primary),
+                        suffixIcon: Icon(Icons.arrow_drop_down,
+                            color: AppTheme.primary),
                       ),
                     ),
-                    items: AppConstants.foodTypes.map((food) {
-                      return DropdownMenuItem(
-                        value: food['sinhala'],
-                        child: Row(
-                          children: [
-                            Text(
-                              food['emoji']!,
-                              style: const TextStyle(fontSize: 24),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Time Picker
+                GestureDetector(
+                  onTap: _selectTime,
+                  child: AbsorbPointer(
+                    child: TextField(
+                      controller: TextEditingController(
+                        text: _selectedTime != null
+                            ? _selectedTime!.format(context)
+                            : '',
+                      ),
+                      decoration: InputDecoration(
+                        labelText: 'Time *',
+                        hintText: 'Select time',
+                        prefixIcon:
+                            Icon(Icons.access_time, color: AppTheme.primary),
+                        suffixIcon: Icon(Icons.arrow_drop_down,
+                            color: AppTheme.primary),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Location
+                TextField(
+                  controller: _locationController,
+                  decoration: InputDecoration(
+                    labelText: 'Location *',
+                    hintText: 'Event address',
+                    prefixIcon:
+                        Icon(Icons.location_on, color: AppTheme.primary),
+                    suffixIcon: _isGettingLocation
+                        ? const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
                             ),
-                            const SizedBox(width: 12),
-                            Text(food['sinhala']!),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                    onChanged: (value) {
+                          )
+                        : IconButton(
+                            icon: Icon(Icons.my_location,
+                                color: AppTheme.primary),
+                            onPressed: _getCurrentLocation,
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Contact Info
+                TextField(
+                  controller: _contactController,
+                  decoration: InputDecoration(
+                    labelText: 'Contact Info (Optional)',
+                    hintText: 'Phone number or email for inquiries',
+                    prefixIcon:
+                        Icon(Icons.contact_phone, color: AppTheme.primary),
+                  ),
+                  keyboardType: TextInputType.phone,
+                ),
+              ],
+            ),
+          ),
+
+          // Step 3: Images & Review
+          Step(
+            title: const Text('Images & Review'),
+            subtitle: const Text('Add photos'),
+            state: _currentStep == 2 ? StepState.editing : StepState.indexed,
+            isActive: _currentStep >= 2,
+            content: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Image Picker
+                Center(
+                  child: ImagePickerButton(
+                    selectedImage: _selectedImage,
+                    existingImageUrl: _existingImageUrl,
+                    onImagePicked: (file) {
                       setState(() {
-                        _selectedFoodType = value;
+                        _selectedImage = file;
                       });
                     },
-                    style: const TextStyle(color: AppTheme.charcoal),
-                    dropdownColor: AppTheme.white,
-                    icon: const Icon(Icons.arrow_drop_down,
-                        color: AppTheme.charcoal),
+                    onRemoveImage: () {
+                      setState(() {
+                        _selectedImage = null;
+                        _existingImageUrl = null;
+                        _existingImagePublicId = null;
+                      });
+                    },
+                    size: 140,
                   ),
-                  const SizedBox(height: 20),
-                ],
-              ),
-            TextField(
-              controller: _titleController,
-              decoration: InputDecoration(
-                labelText: 'Event Title *',
-                labelStyle: const TextStyle(color: AppTheme.charcoal),
-                hintText: 'e.g., Vesak Lantern Festival',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
                 ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide:
-                      const BorderSide(color: AppTheme.saffron, width: 2),
-                ),
-              ),
-              style: const TextStyle(color: AppTheme.charcoal),
-            ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: _descriptionController,
-              maxLines: 3,
-              decoration: InputDecoration(
-                labelText: 'Description (Optional)',
-                labelStyle: const TextStyle(color: AppTheme.charcoal),
-                hintText: 'Tell people about your event...',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide:
-                      const BorderSide(color: AppTheme.saffron, width: 2),
-                ),
-              ),
-              style: const TextStyle(color: AppTheme.charcoal),
-            ),
-            const SizedBox(height: 20),
-            GestureDetector(
-              onTap: _selectDate,
-              child: AbsorbPointer(
-                child: TextField(
-                  controller: TextEditingController(
-                    text: _selectedDate != null
-                        ? DateFormat('EEEE, MMM d, yyyy').format(_selectedDate!)
-                        : '',
-                  ),
-                  decoration: InputDecoration(
-                    labelText: 'Date *',
-                    labelStyle: const TextStyle(color: AppTheme.charcoal),
-                    hintText: 'Select date',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide:
-                          const BorderSide(color: AppTheme.saffron, width: 2),
-                    ),
-                    suffixIcon:
-                        Icon(Icons.calendar_today, color: AppTheme.saffron),
-                  ),
-                  style: const TextStyle(color: AppTheme.charcoal),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            GestureDetector(
-              onTap: _selectTime,
-              child: AbsorbPointer(
-                child: TextField(
-                  controller: TextEditingController(
-                    text: _selectedTime != null
-                        ? _selectedTime!.format(context)
-                        : '',
-                  ),
-                  decoration: InputDecoration(
-                    labelText: 'Time *',
-                    labelStyle: const TextStyle(color: AppTheme.charcoal),
-                    hintText: 'Select time',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide:
-                          const BorderSide(color: AppTheme.saffron, width: 2),
-                    ),
-                    suffixIcon:
-                        Icon(Icons.access_time, color: AppTheme.saffron),
-                  ),
-                  style: const TextStyle(color: AppTheme.charcoal),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: _locationController,
-              decoration: InputDecoration(
-                labelText: 'Location *',
-                labelStyle: const TextStyle(color: AppTheme.charcoal),
-                hintText: 'Event address',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide:
-                      const BorderSide(color: AppTheme.saffron, width: 2),
-                ),
-                suffixIcon: _isGettingLocation
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: Padding(
-                          padding: EdgeInsets.all(12),
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                if (_existingImageUrl != null &&
+                    _existingImageUrl!.isNotEmpty &&
+                    _selectedImage == null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: AppTheme.accent.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
                         ),
-                      )
-                    : IconButton(
-                        icon: Icon(Icons.my_location, color: AppTheme.saffron),
-                        onPressed: _getCurrentLocation,
-                      ),
-              ),
-              style: const TextStyle(color: AppTheme.charcoal),
-            ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: _contactController,
-              decoration: InputDecoration(
-                labelText: 'Contact Info (Optional)',
-                labelStyle: const TextStyle(color: AppTheme.charcoal),
-                hintText: 'Phone number or email for inquiries',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide:
-                      const BorderSide(color: AppTheme.saffron, width: 2),
-                ),
-                prefixIcon: Icon(Icons.contact_phone, color: AppTheme.saffron),
-              ),
-              style: const TextStyle(color: AppTheme.charcoal),
-              keyboardType: TextInputType.phone,
-            ),
-            const SizedBox(height: 30),
-            if (_selectedCategory != null &&
-                _titleController.text.isNotEmpty &&
-                _selectedDate != null &&
-                _selectedTime != null)
-              Container(
-                margin: const EdgeInsets.only(bottom: 20),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppTheme.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppTheme.sand, width: 1),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Preview',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.charcoal,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: AppConstants.getCategoryColor(
-                                _selectedCategory!),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Center(
-                            child: Text(
-                              AppConstants.getCategoryIcon(_selectedCategory!),
-                              style: const TextStyle(fontSize: 20),
-                            ),
+                        child: Text(
+                          'Current image will be kept',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppTheme.accent,
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _titleController.text,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppTheme.charcoal,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              Text(
-                                '${DateFormat('MMM d, yyyy').format(_selectedDate!)} at ${_selectedTime!.format(context)}',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: AppTheme.charcoal.withOpacity(0.6),
-                                ),
-                              ),
-                            ],
-                          ),
+                      ),
+                    ),
+                  ),
+
+                const SizedBox(height: 24),
+
+                // Preview Card
+                if (_selectedCategory != null &&
+                    _titleController.text.isNotEmpty &&
+                    _selectedDate != null &&
+                    _selectedTime != null)
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surface,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: AppTheme.timelineInactive),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.04),
+                          blurRadius: 12,
+                          offset: const Offset(0, 2),
                         ),
                       ],
                     ),
-                  ],
-                ),
-              ),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _isLoading ? null : _handleSubmit,
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-                child: _isLoading
-                    ? const CircularProgressIndicator(color: AppTheme.white)
-                    : Text(_isEditMode ? 'Update Event' : 'Create Event',
-                        style: const TextStyle(fontSize: 16)),
-              ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Preview',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Container(
+                              width: 50,
+                              height: 50,
+                              decoration: BoxDecoration(
+                                color: AppConstants.getCategoryColor(
+                                    _selectedCategory!),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  AppConstants.getCategoryIcon(
+                                      _selectedCategory!),
+                                  style: const TextStyle(fontSize: 28),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _titleController.text,
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppTheme.textPrimary,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  if (_selectedCategory == 'දන්සල' &&
+                                      _selectedFoodType != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 4),
+                                      child: Row(
+                                        children: [
+                                          Text(
+                                            AppConstants.getFoodTypeEmoji(
+                                                _selectedFoodType!),
+                                            style:
+                                                const TextStyle(fontSize: 12),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            _selectedFoodType!,
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: AppTheme.textSecondary,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  Text(
+                                    '${DateFormat('MMM d, yyyy').format(_selectedDate!)} at ${_selectedTime!.format(context)}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: AppTheme.textSecondary,
+                                    ),
+                                  ),
+                                  Text(
+                                    _locationController.text.isNotEmpty
+                                        ? _locationController.text
+                                        : 'Location not set',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: AppTheme.textSecondary,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

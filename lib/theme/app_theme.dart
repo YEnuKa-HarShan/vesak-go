@@ -1,52 +1,112 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  // Buddhist Color Palette
-  static const Color saffron = Color(0xFFFF8C42);
-  static const Color gold = Color(0xFFFFD700);
-  static const Color lotusPink = Color(0xFFFFB7C5);
-  static const Color maroon = Color(0xFF800020);
-  static const Color forestGreen = Color(0xFF228B22);
-  static const Color navy = Color(0xFF1B2A4A);
-  static const Color sand = Color(0xFFF5E6D3);
-  static const Color charcoal = Color(0xFF333333);
-  static const Color white = Color(0xFFFFFFFF);
+  // Memories Theme Palette
+
+  static const Color primary = Color(0xFF4338CA);
+  static const Color accent = Color(0xFFF59E0B);
+
+  static const Color background = Color(0xFFFAF8F3);
+  static const Color surface = Color(0xFFFFFFFF);
+
+  static const Color textPrimary = Color(0xFF111827);
+  static const Color textSecondary = Color(0xFF6B7280);
+
+  static const Color error = Color(0xFFDC2626);
+
+  static const Color timelineActive = Color(0xFF4338CA);
+  static const Color timelineInactive = Color(0xFFD1D5DB);
+
+  static const Color event2026 = Color(0xFFEEF2FF);
+  static const Color event2025 = Color(0xFFFEF3C7);
+  static const Color event2024 = Color(0xFFECFDF5);
 
   static ThemeData lightTheme = ThemeData(
     useMaterial3: true,
     brightness: Brightness.light,
-    primaryColor: saffron,
-    scaffoldBackgroundColor: sand,
+
+    scaffoldBackgroundColor: background,
+
     colorScheme: const ColorScheme.light(
-      primary: saffron,
-      secondary: gold,
-      surface: white,
-      error: maroon,
-      onPrimary: white,
-      onSecondary: charcoal,
-      onSurface: charcoal,
-      onError: white,
-      brightness: Brightness.light,
+      primary: primary,
+      secondary: accent,
+      surface: surface,
+      error: error,
+      onPrimary: Colors.white,
+      onSecondary: Colors.white,
+      onSurface: textPrimary,
+      onError: Colors.white,
     ),
+
+    // -------------------------
+    // AppBar
+    // -------------------------
     appBarTheme: const AppBarTheme(
-      backgroundColor: navy,
-      foregroundColor: white,
+      backgroundColor: background,
+      foregroundColor: textPrimary,
       elevation: 0,
+      scrolledUnderElevation: 0,
+      surfaceTintColor: Colors.transparent,
       centerTitle: false,
       titleTextStyle: TextStyle(
-        color: white,
-        fontSize: 20,
-        fontWeight: FontWeight.bold,
+        color: textPrimary,
+        fontSize: 24,
+        fontWeight: FontWeight.w700,
       ),
     ),
+
+    // -------------------------
+    // Typography
+    // -------------------------
+    textTheme: const TextTheme(
+      headlineLarge: TextStyle(
+        fontSize: 28,
+        fontWeight: FontWeight.w700,
+        color: textPrimary,
+      ),
+      headlineMedium: TextStyle(
+        fontSize: 24,
+        fontWeight: FontWeight.w700,
+        color: textPrimary,
+      ),
+      titleLarge: TextStyle(
+        fontSize: 20,
+        fontWeight: FontWeight.w600,
+        color: textPrimary,
+      ),
+      titleMedium: TextStyle(
+        fontSize: 18,
+        fontWeight: FontWeight.w600,
+        color: textPrimary,
+      ),
+      bodyLarge: TextStyle(
+        fontSize: 16,
+        color: textPrimary,
+      ),
+      bodyMedium: TextStyle(
+        fontSize: 14,
+        color: textPrimary,
+      ),
+      bodySmall: TextStyle(
+        fontSize: 12,
+        color: textSecondary,
+      ),
+    ),
+
+    // -------------------------
+    // Elevated Button
+    // -------------------------
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
-        backgroundColor: saffron,
-        foregroundColor: white,
+        backgroundColor: primary,
+        foregroundColor: Colors.white,
         elevation: 0,
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 24,
+          vertical: 14,
+        ),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
         ),
         textStyle: const TextStyle(
           fontSize: 16,
@@ -54,87 +114,154 @@ class AppTheme {
         ),
       ),
     ),
+
+    // -------------------------
+    // Outlined Button
+    // -------------------------
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        foregroundColor: maroon,
-        side: const BorderSide(color: maroon),
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+        foregroundColor: primary,
+        side: const BorderSide(
+          color: primary,
         ),
-        textStyle: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w600,
+        padding: const EdgeInsets.symmetric(
+          horizontal: 24,
+          vertical: 14,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
         ),
       ),
     ),
+
+    // -------------------------
+    // Text Button
+    // -------------------------
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
-        foregroundColor: saffron,
-        textStyle: const TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
+        foregroundColor: primary,
+      ),
+    ),
+
+    // -------------------------
+    // Input Fields
+    // -------------------------
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: Colors.white,
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: 16,
+        vertical: 16,
+      ),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(
+          color: Color(0xFFE5E7EB),
+        ),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(
+          color: Color(0xFFE5E7EB),
+        ),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(
+          color: primary,
+          width: 2,
+        ),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(
+          color: error,
+        ),
+      ),
+      labelStyle: const TextStyle(
+        color: textSecondary,
+      ),
+      hintStyle: const TextStyle(
+        color: textSecondary,
+      ),
+    ),
+
+    // -------------------------
+    // Cards
+    // -------------------------
+    cardTheme: CardThemeData(
+      color: Colors.white,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(
+          color: Color(0xFFF1F5F9),
+        ),
+      ),
+      margin: const EdgeInsets.symmetric(
+        horizontal: 16,
+        vertical: 8,
+      ),
+    ),
+
+    // -------------------------
+    // Chips
+    // -------------------------
+    chipTheme: ChipThemeData(
+      backgroundColor: Colors.white,
+      selectedColor: primary,
+      labelStyle: const TextStyle(
+        color: textPrimary,
+      ),
+      secondaryLabelStyle: const TextStyle(
+        color: Colors.white,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+        side: const BorderSide(
+          color: Color(0xFFE5E7EB),
         ),
       ),
     ),
-    inputDecorationTheme: InputDecorationTheme(
-      filled: true,
-      fillColor: white,
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: sand),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: sand),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: saffron, width: 2),
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: maroon),
-      ),
-      labelStyle: const TextStyle(color: charcoal),
-      hintStyle: const TextStyle(color: Colors.grey),
-    ),
-    cardTheme: CardThemeData(
-      color: white,
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      shadowColor: Colors.black.withOpacity(0.05),
-    ),
-    chipTheme: ChipThemeData(
-      backgroundColor: white,
-      selectedColor: saffron,
-      labelStyle: const TextStyle(color: charcoal),
-      secondaryLabelStyle: const TextStyle(color: white),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      shape: StadiumBorder(
-        side: BorderSide(color: sand),
-      ),
-    ),
+
+    // -------------------------
+    // Divider
+    // -------------------------
     dividerTheme: const DividerThemeData(
-      color: sand,
+      color: Color(0xFFE5E7EB),
       thickness: 1,
     ),
+
+    // -------------------------
+    // FAB
+    // -------------------------
     floatingActionButtonTheme: const FloatingActionButtonThemeData(
-      backgroundColor: saffron,
-      foregroundColor: white,
+      backgroundColor: primary,
+      foregroundColor: Colors.white,
+      elevation: 0,
     ),
+
+    // -------------------------
+    // Bottom Sheet
+    // -------------------------
     bottomSheetTheme: const BottomSheetThemeData(
-      backgroundColor: white,
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(28),
+        ),
       ),
     ),
+
+    // -------------------------
+    // Tab Bar
+    // -------------------------
     tabBarTheme: const TabBarThemeData(
-      labelColor: saffron,
-      unselectedLabelColor: Colors.grey,
-      indicatorColor: saffron,
+      labelColor: primary,
+      unselectedLabelColor: textSecondary,
+      indicatorColor: primary,
+      dividerColor: Colors.transparent,
     ),
   );
 }

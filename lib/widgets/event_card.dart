@@ -69,17 +69,17 @@ class EventCard extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: AppTheme.charcoal.withOpacity(0.08),
-              blurRadius: 10,
+              color: Colors.black.withOpacity(0.06),
+              blurRadius: 12,
               offset: const Offset(0, 2),
             ),
           ],
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
           child: Stack(
             children: [
               // Background Image or Gradient
@@ -166,7 +166,7 @@ class EventCard extends StatelessWidget {
                                 event.getCategoryDisplayName(),
                                 style: const TextStyle(
                                   fontSize: 11,
-                                  color: AppTheme.white,
+                                  color: Colors.white,
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
@@ -179,14 +179,14 @@ class EventCard extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
-                              color: AppTheme.forestGreen.withOpacity(0.8),
+                              color: AppTheme.accent,
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: const Text(
                               'Active',
                               style: TextStyle(
                                 fontSize: 10,
-                                color: AppTheme.white,
+                                color: Colors.white,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
@@ -200,8 +200,9 @@ class EventCard extends StatelessWidget {
                       event.title,
                       style: const TextStyle(
                         fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.white,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                        letterSpacing: -0.3,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -211,24 +212,24 @@ class EventCard extends StatelessWidget {
                     Row(
                       children: [
                         const Icon(Icons.calendar_today,
-                            size: 14, color: AppTheme.white),
+                            size: 14, color: Colors.white),
                         const SizedBox(width: 6),
                         Text(
                           _formatDate(eventDate),
                           style: TextStyle(
                             fontSize: 12,
-                            color: AppTheme.white.withOpacity(0.9),
+                            color: Colors.white.withOpacity(0.9),
                           ),
                         ),
                         const SizedBox(width: 16),
                         const Icon(Icons.access_time,
-                            size: 14, color: AppTheme.white),
+                            size: 14, color: Colors.white),
                         const SizedBox(width: 6),
                         Text(
                           event.time,
                           style: TextStyle(
                             fontSize: 12,
-                            color: AppTheme.white.withOpacity(0.9),
+                            color: Colors.white.withOpacity(0.9),
                           ),
                         ),
                       ],
@@ -238,14 +239,14 @@ class EventCard extends StatelessWidget {
                     Row(
                       children: [
                         const Icon(Icons.location_on,
-                            size: 14, color: AppTheme.white),
+                            size: 14, color: Colors.white),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
                             event.location,
                             style: TextStyle(
                               fontSize: 11,
-                              color: AppTheme.white.withOpacity(0.8),
+                              color: Colors.white.withOpacity(0.8),
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -262,9 +263,8 @@ class EventCard extends StatelessWidget {
                             child: OutlinedButton(
                               onPressed: onEdit,
                               style: OutlinedButton.styleFrom(
-                                backgroundColor:
-                                    AppTheme.white.withOpacity(0.9),
-                                foregroundColor: AppTheme.saffron,
+                                backgroundColor: Colors.white.withOpacity(0.9),
+                                foregroundColor: AppTheme.primary,
                                 side: BorderSide.none,
                                 padding:
                                     const EdgeInsets.symmetric(vertical: 8),
@@ -287,9 +287,8 @@ class EventCard extends StatelessWidget {
                             child: OutlinedButton(
                               onPressed: onShare,
                               style: OutlinedButton.styleFrom(
-                                backgroundColor:
-                                    AppTheme.white.withOpacity(0.9),
-                                foregroundColor: AppTheme.navy,
+                                backgroundColor: Colors.white.withOpacity(0.9),
+                                foregroundColor: AppTheme.accent,
                                 side: BorderSide.none,
                                 padding:
                                     const EdgeInsets.symmetric(vertical: 8),
@@ -312,9 +311,8 @@ class EventCard extends StatelessWidget {
                             child: OutlinedButton(
                               onPressed: onDelete,
                               style: OutlinedButton.styleFrom(
-                                backgroundColor:
-                                    AppTheme.white.withOpacity(0.9),
-                                foregroundColor: AppTheme.maroon,
+                                backgroundColor: Colors.white.withOpacity(0.9),
+                                foregroundColor: AppTheme.error,
                                 side: BorderSide.none,
                                 padding:
                                     const EdgeInsets.symmetric(vertical: 8),

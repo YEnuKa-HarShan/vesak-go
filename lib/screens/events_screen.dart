@@ -9,7 +9,6 @@ import '../constants.dart';
 import '../theme/app_theme.dart';
 import '../widgets/event_card.dart';
 import 'create_event_screen.dart';
-// Import EventDetailsScreen at the top (add this import)
 import 'event_details_screen.dart';
 
 class EventsScreen extends StatefulWidget {
@@ -280,18 +279,18 @@ class _EventsScreenState extends State<EventsScreen>
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Event',
-            style: TextStyle(color: AppTheme.charcoal)),
+            style: TextStyle(color: AppTheme.textPrimary)),
         content: const Text('Are you sure you want to delete this event?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
             child: const Text('Cancel',
-                style: TextStyle(color: AppTheme.charcoal)),
+                style: TextStyle(color: AppTheme.textSecondary)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child:
-                const Text('Delete', style: TextStyle(color: AppTheme.maroon)),
+            style: TextButton.styleFrom(foregroundColor: AppTheme.error),
+            child: const Text('Delete'),
           ),
         ],
       ),
@@ -330,19 +329,19 @@ class _EventsScreenState extends State<EventsScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.sand,
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
         title: const Text(
           'Events',
-          style: TextStyle(color: AppTheme.white, fontWeight: FontWeight.bold),
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
         ),
-        backgroundColor: AppTheme.navy,
+        backgroundColor: AppTheme.primary,
         elevation: 0,
         bottom: TabBar(
           controller: _tabController,
-          labelColor: AppTheme.gold,
-          unselectedLabelColor: AppTheme.white.withOpacity(0.6),
-          indicatorColor: AppTheme.gold,
+          labelColor: AppTheme.accent,
+          unselectedLabelColor: Colors.white.withOpacity(0.7),
+          indicatorColor: AppTheme.accent,
           tabs: const [
             Tab(text: 'My Events'),
             Tab(text: 'All Events'),
@@ -350,7 +349,7 @@ class _EventsScreenState extends State<EventsScreen>
           ],
         ),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppTheme.white),
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
@@ -358,7 +357,7 @@ class _EventsScreenState extends State<EventsScreen>
             IconButton(
               icon: Icon(
                 _isCalendarView ? Icons.view_list : Icons.calendar_month,
-                color: AppTheme.white,
+                color: Colors.white,
               ),
               onPressed: () {
                 setState(() {
@@ -371,10 +370,8 @@ class _EventsScreenState extends State<EventsScreen>
               _searchQuery.isNotEmpty)
             TextButton(
               onPressed: _clearAllFilters,
-              child: const Text(
-                'Clear All',
-                style: TextStyle(color: AppTheme.gold),
-              ),
+              style: TextButton.styleFrom(foregroundColor: AppTheme.accent),
+              child: const Text('Clear All'),
             ),
         ],
       ),
@@ -384,12 +381,12 @@ class _EventsScreenState extends State<EventsScreen>
             padding: const EdgeInsets.all(16),
             child: Container(
               decoration: BoxDecoration(
-                color: AppTheme.white,
-                borderRadius: BorderRadius.circular(12),
+                color: AppTheme.surface,
+                borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: AppTheme.charcoal.withOpacity(0.05),
-                    blurRadius: 10,
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 12,
                     offset: const Offset(0, 2),
                   ),
                 ],
@@ -404,13 +401,11 @@ class _EventsScreenState extends State<EventsScreen>
                 },
                 decoration: InputDecoration(
                   hintText: 'Search events by title or location...',
-                  hintStyle:
-                      TextStyle(color: AppTheme.charcoal.withOpacity(0.5)),
-                  prefixIcon: Icon(Icons.search, color: AppTheme.saffron),
+                  prefixIcon: Icon(Icons.search, color: AppTheme.primary),
                   suffixIcon: _searchQuery.isNotEmpty
                       ? IconButton(
-                          icon: Icon(Icons.clear,
-                              color: AppTheme.charcoal.withOpacity(0.5)),
+                          icon:
+                              Icon(Icons.clear, color: AppTheme.textSecondary),
                           onPressed: () {
                             setState(() {
                               _searchQuery = '';
@@ -421,11 +416,11 @@ class _EventsScreenState extends State<EventsScreen>
                         )
                       : null,
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(20),
                     borderSide: BorderSide.none,
                   ),
                   filled: true,
-                  fillColor: AppTheme.white,
+                  fillColor: AppTheme.surface,
                 ),
               ),
             ),
@@ -471,16 +466,16 @@ class _EventsScreenState extends State<EventsScreen>
           eventLoader: _getEventsForDay,
           calendarStyle: CalendarStyle(
             todayDecoration: BoxDecoration(
-              color: AppTheme.saffron.withOpacity(0.3),
+              color: AppTheme.primary.withOpacity(0.2),
               shape: BoxShape.circle,
             ),
             selectedDecoration: BoxDecoration(
-              color: AppTheme.saffron,
+              color: AppTheme.primary,
               shape: BoxShape.circle,
             ),
-            weekendTextStyle: const TextStyle(color: AppTheme.maroon),
+            weekendTextStyle: const TextStyle(color: AppTheme.error),
             markerDecoration: BoxDecoration(
-              color: AppTheme.gold,
+              color: AppTheme.accent,
               shape: BoxShape.circle,
             ),
           ),
@@ -488,17 +483,17 @@ class _EventsScreenState extends State<EventsScreen>
             titleCentered: true,
             formatButtonVisible: false,
             titleTextStyle: const TextStyle(
-              color: AppTheme.charcoal,
+              color: AppTheme.textPrimary,
               fontSize: 16,
-              fontWeight: FontWeight.bold,
+              fontWeight: FontWeight.w700,
             ),
-            leftChevronIcon: Icon(Icons.chevron_left, color: AppTheme.saffron),
+            leftChevronIcon: Icon(Icons.chevron_left, color: AppTheme.primary),
             rightChevronIcon:
-                Icon(Icons.chevron_right, color: AppTheme.saffron),
+                Icon(Icons.chevron_right, color: AppTheme.primary),
           ),
           daysOfWeekStyle: DaysOfWeekStyle(
-            weekdayStyle: TextStyle(color: AppTheme.charcoal.withOpacity(0.6)),
-            weekendStyle: TextStyle(color: AppTheme.maroon),
+            weekdayStyle: TextStyle(color: AppTheme.textSecondary),
+            weekendStyle: const TextStyle(color: AppTheme.error),
           ),
         ),
         const SizedBox(height: 16),
@@ -524,14 +519,14 @@ class _EventsScreenState extends State<EventsScreen>
             Icon(
               Icons.lock_outline,
               size: 64,
-              color: AppTheme.charcoal.withOpacity(0.4),
+              color: AppTheme.textSecondary.withOpacity(0.4),
             ),
             const SizedBox(height: 16),
             Text(
               'Login to view your events',
               style: TextStyle(
                 fontSize: 16,
-                color: AppTheme.charcoal.withOpacity(0.6),
+                color: AppTheme.textSecondary,
               ),
             ),
             const SizedBox(height: 20),
@@ -540,6 +535,9 @@ class _EventsScreenState extends State<EventsScreen>
                 await Navigator.pushNamed(context, '/login');
                 _loadEvents();
               },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+              ),
               child: const Text('Login Now'),
             ),
           ],
@@ -584,14 +582,14 @@ class _EventsScreenState extends State<EventsScreen>
             Icon(
               Icons.event_busy,
               size: 64,
-              color: AppTheme.charcoal.withOpacity(0.4),
+              color: AppTheme.textSecondary.withOpacity(0.4),
             ),
             const SizedBox(height: 16),
             Text(
               message,
               style: TextStyle(
                 fontSize: 16,
-                color: AppTheme.charcoal.withOpacity(0.6),
+                color: AppTheme.textSecondary,
               ),
               textAlign: TextAlign.center,
             ),
@@ -602,7 +600,7 @@ class _EventsScreenState extends State<EventsScreen>
 
     return RefreshIndicator(
       onRefresh: _loadEvents,
-      color: AppTheme.gold,
+      color: AppTheme.accent,
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
         itemCount: events.length,
@@ -644,14 +642,14 @@ class _EventsScreenState extends State<EventsScreen>
             Icon(
               Icons.bookmark_border,
               size: 64,
-              color: AppTheme.charcoal.withOpacity(0.4),
+              color: AppTheme.textSecondary.withOpacity(0.4),
             ),
             const SizedBox(height: 16),
             Text(
               'Login to bookmark events',
               style: TextStyle(
                 fontSize: 16,
-                color: AppTheme.charcoal.withOpacity(0.6),
+                color: AppTheme.textSecondary,
               ),
             ),
             const SizedBox(height: 20),
@@ -660,6 +658,9 @@ class _EventsScreenState extends State<EventsScreen>
                 await Navigator.pushNamed(context, '/login');
                 _loadBookmarkedEvents();
               },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+              ),
               child: const Text('Login Now'),
             ),
           ],
@@ -675,14 +676,14 @@ class _EventsScreenState extends State<EventsScreen>
             Icon(
               Icons.bookmark_border,
               size: 64,
-              color: AppTheme.charcoal.withOpacity(0.4),
+              color: AppTheme.textSecondary.withOpacity(0.4),
             ),
             const SizedBox(height: 16),
             Text(
               'No bookmarked events yet',
               style: TextStyle(
                 fontSize: 16,
-                color: AppTheme.charcoal.withOpacity(0.6),
+                color: AppTheme.textSecondary,
               ),
             ),
             const SizedBox(height: 8),
@@ -690,7 +691,7 @@ class _EventsScreenState extends State<EventsScreen>
               'Tap the bookmark icon on any event to save it here',
               style: TextStyle(
                 fontSize: 12,
-                color: AppTheme.charcoal.withOpacity(0.4),
+                color: AppTheme.textSecondary.withOpacity(0.5),
               ),
             ),
           ],
@@ -700,7 +701,7 @@ class _EventsScreenState extends State<EventsScreen>
 
     return RefreshIndicator(
       onRefresh: _loadBookmarkedEvents,
-      color: AppTheme.gold,
+      color: AppTheme.accent,
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
         itemCount: _bookmarkedEvents.length,
@@ -719,9 +720,7 @@ class _EventsScreenState extends State<EventsScreen>
                   builder: (context) => EventDetailsScreen(event: event),
                 ),
               ).then((_) {
-                if (_tabController.index == 2) {
-                  _loadBookmarkedEvents();
-                }
+                _loadBookmarkedEvents();
               });
             },
             onEdit: () => _editEvent(event),
@@ -745,16 +744,12 @@ class _EventsScreenState extends State<EventsScreen>
             label: const Text('All'),
             selected: _selectedStatus == null,
             onSelected: (_) => _applyStatusFilter(null),
-            backgroundColor: AppTheme.white,
-            selectedColor: AppTheme.saffron,
+            backgroundColor: AppTheme.surface,
+            selectedColor: AppTheme.primary,
             labelStyle: TextStyle(
               color:
-                  _selectedStatus == null ? AppTheme.white : AppTheme.charcoal,
+                  _selectedStatus == null ? Colors.white : AppTheme.textPrimary,
               fontWeight: FontWeight.w500,
-            ),
-            side: BorderSide(
-              color: AppTheme.sand,
-              width: _selectedStatus == null ? 0 : 1,
             ),
           ),
           const SizedBox(width: 8),
@@ -762,17 +757,13 @@ class _EventsScreenState extends State<EventsScreen>
             label: const Text('Active'),
             selected: _selectedStatus == 'active',
             onSelected: (_) => _applyStatusFilter('active'),
-            backgroundColor: AppTheme.white,
-            selectedColor: AppTheme.saffron,
+            backgroundColor: AppTheme.surface,
+            selectedColor: AppTheme.primary,
             labelStyle: TextStyle(
               color: _selectedStatus == 'active'
-                  ? AppTheme.white
-                  : AppTheme.charcoal,
+                  ? Colors.white
+                  : AppTheme.textPrimary,
               fontWeight: FontWeight.w500,
-            ),
-            side: BorderSide(
-              color: AppTheme.sand,
-              width: _selectedStatus == 'active' ? 0 : 1,
             ),
           ),
           const SizedBox(width: 8),
@@ -780,17 +771,13 @@ class _EventsScreenState extends State<EventsScreen>
             label: const Text('Today'),
             selected: _selectedStatus == 'today',
             onSelected: (_) => _applyStatusFilter('today'),
-            backgroundColor: AppTheme.white,
-            selectedColor: AppTheme.saffron,
+            backgroundColor: AppTheme.surface,
+            selectedColor: AppTheme.primary,
             labelStyle: TextStyle(
               color: _selectedStatus == 'today'
-                  ? AppTheme.white
-                  : AppTheme.charcoal,
+                  ? Colors.white
+                  : AppTheme.textPrimary,
               fontWeight: FontWeight.w500,
-            ),
-            side: BorderSide(
-              color: AppTheme.sand,
-              width: _selectedStatus == 'today' ? 0 : 1,
             ),
           ),
           const SizedBox(width: 8),
@@ -798,17 +785,13 @@ class _EventsScreenState extends State<EventsScreen>
             label: const Text('Tomorrow'),
             selected: _selectedStatus == 'tomorrow',
             onSelected: (_) => _applyStatusFilter('tomorrow'),
-            backgroundColor: AppTheme.white,
-            selectedColor: AppTheme.saffron,
+            backgroundColor: AppTheme.surface,
+            selectedColor: AppTheme.primary,
             labelStyle: TextStyle(
               color: _selectedStatus == 'tomorrow'
-                  ? AppTheme.white
-                  : AppTheme.charcoal,
+                  ? Colors.white
+                  : AppTheme.textPrimary,
               fontWeight: FontWeight.w500,
-            ),
-            side: BorderSide(
-              color: AppTheme.sand,
-              width: _selectedStatus == 'tomorrow' ? 0 : 1,
             ),
           ),
         ],
@@ -828,17 +811,13 @@ class _EventsScreenState extends State<EventsScreen>
             label: const Text('All'),
             selected: _selectedCategory == null,
             onSelected: (_) => _applyCategoryFilter(null),
-            backgroundColor: AppTheme.white,
-            selectedColor: AppTheme.saffron,
+            backgroundColor: AppTheme.surface,
+            selectedColor: AppTheme.primary,
             labelStyle: TextStyle(
               color: _selectedCategory == null
-                  ? AppTheme.white
-                  : AppTheme.charcoal,
+                  ? Colors.white
+                  : AppTheme.textPrimary,
               fontWeight: FontWeight.w500,
-            ),
-            side: BorderSide(
-              color: AppTheme.sand,
-              width: _selectedCategory == null ? 0 : 1,
             ),
           ),
           const SizedBox(width: 8),
@@ -859,17 +838,13 @@ class _EventsScreenState extends State<EventsScreen>
                 ),
                 selected: _selectedCategory == category,
                 onSelected: (_) => _applyCategoryFilter(category),
-                backgroundColor: AppTheme.white,
-                selectedColor: AppTheme.saffron,
+                backgroundColor: AppTheme.surface,
+                selectedColor: AppTheme.primary,
                 labelStyle: TextStyle(
                   color: _selectedCategory == category
-                      ? AppTheme.white
-                      : AppTheme.charcoal,
+                      ? Colors.white
+                      : AppTheme.textPrimary,
                   fontWeight: FontWeight.w500,
-                ),
-                side: BorderSide(
-                  color: AppTheme.sand,
-                  width: _selectedCategory == category ? 0 : 1,
                 ),
               ),
             );
