@@ -16,6 +16,8 @@ class EventModel {
   final String foodType;
   final String imageUrl;
   final String imagePublicId;
+  final String? district;
+  final String? province;
 
   EventModel({
     required this.id,
@@ -33,6 +35,8 @@ class EventModel {
     required this.foodType,
     required this.imageUrl,
     required this.imagePublicId,
+    this.district,
+    this.province,
   });
 
   Map<String, dynamic> toJson() {
@@ -52,26 +56,32 @@ class EventModel {
       'food_type': foodType,
       'image_url': imageUrl,
       'image_public_id': imagePublicId,
+      'district': district,
+      'province': province,
     };
   }
 
   factory EventModel.fromJson(Map<String, dynamic> json) {
     return EventModel(
-      id: json['id'],
-      category: json['category'],
-      title: json['title'],
+      id: json['id'] ?? '',
+      category: json['category'] ?? '',
+      title: json['title'] ?? '',
       description: json['description'],
-      date: json['date'],
-      time: json['time'],
-      location: json['location'],
-      userId: json['user_id'],
-      createdBy: json['created_by'],
-      createdAt: DateTime.parse(json['created_at']),
-      latitude: (json['latitude'] as num).toDouble(),
-      longitude: (json['longitude'] as num).toDouble(),
+      date: json['date'] ?? '',
+      time: json['time'] ?? '',
+      location: json['location'] ?? '',
+      userId: json['user_id'] ?? '',
+      createdBy: json['created_by'] ?? '',
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'])
+          : DateTime.now(),
+      latitude: (json['latitude'] as num?)?.toDouble() ?? 0.0,
+      longitude: (json['longitude'] as num?)?.toDouble() ?? 0.0,
       foodType: json['food_type'] ?? 'none',
       imageUrl: json['image_url'] ?? '',
       imagePublicId: json['image_public_id'] ?? '',
+      district: json['district'],
+      province: json['province'],
     );
   }
 
@@ -94,4 +104,11 @@ class EventModel {
   }
 
   bool get hasImage => imageUrl.isNotEmpty;
+
+  String get locationDisplay {
+    if (district != null && district!.isNotEmpty) {
+      return '$location ($district${province != null ? ', $province' : ''})';
+    }
+    return location;
+  }
 }

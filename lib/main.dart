@@ -8,12 +8,20 @@ import 'theme/app_theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await dotenv.load();
+  try {
+    await dotenv.load();
+  } catch (e) {
+    print('Error loading .env: $e');
+  }
 
-  await Supabase.initialize(
-    url: dotenv.env['SUPABASE_URL']!,
-    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
-  );
+  try {
+    await Supabase.initialize(
+      url: dotenv.env['SUPABASE_URL'] ?? '',
+      anonKey: dotenv.env['SUPABASE_ANON_KEY'] ?? '',
+    );
+  } catch (e) {
+    print('Error initializing Supabase: $e');
+  }
 
   final sessionService = SessionService();
   await sessionService.init();

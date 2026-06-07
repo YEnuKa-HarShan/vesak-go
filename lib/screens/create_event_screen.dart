@@ -7,15 +7,10 @@ import 'package:geolocator/geolocator.dart';
 import '../services/supabase_service.dart';
 import '../services/location_service.dart';
 import '../services/session_service.dart';
-import '../services/image_service.dart';
+import '../services/cloudinary_service.dart';
 import '../models/event_model.dart';
 import '../constants.dart';
 import '../theme/app_theme.dart';
-import '../widgets/image_picker_button.dart';
-
-// ─────────────────────────────────────────────────────────────
-//  Glass helper  (matches HomeScreen / EventDetailsScreen)
-// ─────────────────────────────────────────────────────────────
 
 class _Glass extends StatelessWidget {
   final Widget child;
@@ -58,10 +53,6 @@ class _Glass extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Screen
-// ─────────────────────────────────────────────────────────────
-
 class CreateEventScreen extends StatefulWidget {
   final String userId;
   final String userFirstName;
@@ -83,7 +74,7 @@ class _CreateEventScreenState extends State<CreateEventScreen>
   final SupabaseService _supabaseService = SupabaseService();
   final LocationService _locationService = LocationService();
   final SessionService _sessionService = SessionService();
-  final ImageService _imageService = ImageService();
+  final CloudinaryService _cloudinaryService = CloudinaryService();
 
   String? _selectedCategory;
   String? _selectedFoodType;
@@ -92,7 +83,6 @@ class _CreateEventScreenState extends State<CreateEventScreen>
   DateTime? _selectedDate;
   TimeOfDay? _selectedTime;
   final TextEditingController _locationController = TextEditingController();
-  final TextEditingController _contactController = TextEditingController();
   File? _selectedImage;
   String? _existingImageUrl;
   String? _existingImagePublicId;
@@ -103,12 +93,7 @@ class _CreateEventScreenState extends State<CreateEventScreen>
   int _currentStep = 0;
 
   late AnimationController _fadeController;
-
   static const int _totalSteps = 3;
-
-  // ─────────────────────────────────────────────
-  //  INIT / DISPOSE
-  // ─────────────────────────────────────────────
 
   @override
   void initState() {
@@ -132,14 +117,9 @@ class _CreateEventScreenState extends State<CreateEventScreen>
     _titleController.dispose();
     _descriptionController.dispose();
     _locationController.dispose();
-    _contactController.dispose();
     _fadeController.dispose();
     super.dispose();
   }
-
-  // ─────────────────────────────────────────────
-  //  DATA HELPERS
-  // ─────────────────────────────────────────────
 
   void _loadEventData() {
     final event = widget.editEvent!;
@@ -208,10 +188,6 @@ class _CreateEventScreenState extends State<CreateEventScreen>
     if (picked != null) setState(() => _selectedTime = picked);
   }
 
-  // ─────────────────────────────────────────────
-  //  STEP NAVIGATION
-  // ─────────────────────────────────────────────
-
   void _nextStep() {
     if (_currentStep == 0) {
       if (_selectedCategory == null) {
@@ -254,15 +230,20 @@ class _CreateEventScreenState extends State<CreateEventScreen>
     setState(() => _currentStep--);
   }
 
-  // ─────────────────────────────────────────────
-  //  SUBMIT
-  // ─────────────────────────────────────────────
+  Future<void> _pickImage() async {
+    final file = await _cloudinaryService.pickImage();
+    if (file != null) {
+      setState(() => _selectedImage = file);
+    }
+  }
 
   Future<void> _handleSubmit() async {
     setState(() => _isLoading = true);
 
     double latitude = 7.8731;
     double longitude = 80.7718;
+    String? district;
+    String? province;
 
     try {
       LocationPermission permission = await Geolocator.checkPermission();
@@ -277,6 +258,11 @@ class _CreateEventScreenState extends State<CreateEventScreen>
         );
         latitude = position.latitude;
         longitude = position.longitude;
+
+        final locationInfo =
+            await _locationService.getDistrictAndProvince(latitude, longitude);
+        district = locationInfo['district'];
+        province = locationInfo['province'];
       }
     } catch (e) {
       debugPrint('Could not get coordinates: $e');
@@ -288,15 +274,13 @@ class _CreateEventScreenState extends State<CreateEventScreen>
     String imageUrl = _existingImageUrl ?? '';
     String imagePublicId = _existingImagePublicId ?? '';
 
+    // Upload new image to Cloudinary if selected
     if (_selectedImage != null) {
-      final eventId = _isEditMode
-          ? widget.editEvent!.id
-          : DateTime.now().millisecondsSinceEpoch.toString();
-      final uploadedUrl = await _imageService.updateImage(
-          _selectedImage!, eventId, imagePublicId);
-      if (uploadedUrl != null) {
-        imageUrl = uploadedUrl;
-        imagePublicId = uploadedUrl.split('/event-images/').last;
+      final uploadResult =
+          await _cloudinaryService.uploadImage(_selectedImage!);
+      if (uploadResult != null) {
+        imageUrl = _cloudinaryService.extractUrl(uploadResult);
+        imagePublicId = _cloudinaryService.extractPublicId(uploadResult);
       }
     }
 
@@ -318,6 +302,8 @@ class _CreateEventScreenState extends State<CreateEventScreen>
         foodType: _selectedCategory == 'දන්සල' ? _selectedFoodType! : 'none',
         imageUrl: imageUrl,
         imagePublicId: imagePublicId,
+        district: district,
+        province: province,
       );
     } else {
       success = await _supabaseService.createEvent(
@@ -336,6 +322,8 @@ class _CreateEventScreenState extends State<CreateEventScreen>
         foodType: _selectedCategory == 'දන්සල' ? _selectedFoodType! : 'none',
         imageUrl: imageUrl,
         imagePublicId: imagePublicId,
+        district: district,
+        province: province,
       );
     }
 
@@ -391,20 +379,13 @@ class _CreateEventScreenState extends State<CreateEventScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  BUILD ROOT
-  // ─────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.background,
       body: Stack(
         children: [
-          // ── Ambient blobs ──
           _buildAmbientBlobs(),
-
-          // ── Main content ──
           SafeArea(
             child: Column(
               children: [
@@ -428,10 +409,6 @@ class _CreateEventScreenState extends State<CreateEventScreen>
       ),
     );
   }
-
-  // ─────────────────────────────────────────────
-  //  AMBIENT BLOBS
-  // ─────────────────────────────────────────────
 
   Widget _buildAmbientBlobs() {
     return Stack(
@@ -476,10 +453,6 @@ class _CreateEventScreenState extends State<CreateEventScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  GLASS HEADER
-  // ─────────────────────────────────────────────
-
   Widget _buildHeader() {
     return ClipRect(
       child: BackdropFilter(
@@ -497,7 +470,6 @@ class _CreateEventScreenState extends State<CreateEventScreen>
           ),
           child: Row(
             children: [
-              // Back button
               _Glass(
                 borderRadius: BorderRadius.circular(14),
                 blur: 12,
@@ -517,10 +489,7 @@ class _CreateEventScreenState extends State<CreateEventScreen>
                   ),
                 ),
               ),
-
               const SizedBox(width: 14),
-
-              // Title + subtitle
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -546,8 +515,6 @@ class _CreateEventScreenState extends State<CreateEventScreen>
                   ],
                 ),
               ),
-
-              // Step counter pill
               _Glass(
                 borderRadius: BorderRadius.circular(20),
                 blur: 8,
@@ -573,10 +540,6 @@ class _CreateEventScreenState extends State<CreateEventScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  STEP INDICATOR
-  // ─────────────────────────────────────────────
-
   Widget _buildStepIndicator() {
     final stepLabels = ['Basic Info', 'Date & Location', 'Photo & Review'];
     final stepIcons = [
@@ -590,7 +553,6 @@ class _CreateEventScreenState extends State<CreateEventScreen>
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       child: Column(
         children: [
-          // Progress bar
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
@@ -600,10 +562,7 @@ class _CreateEventScreenState extends State<CreateEventScreen>
               minHeight: 4,
             ),
           ),
-
           const SizedBox(height: 12),
-
-          // Step labels
           Row(
             children: List.generate(_totalSteps, (i) {
               final isActive = i == _currentStep;
@@ -654,16 +613,11 @@ class _CreateEventScreenState extends State<CreateEventScreen>
               );
             }),
           ),
-
           const SizedBox(height: 4),
         ],
       ),
     );
   }
-
-  // ─────────────────────────────────────────────
-  //  STEP ROUTER
-  // ─────────────────────────────────────────────
 
   Widget _buildCurrentStep() {
     switch (_currentStep) {
@@ -678,18 +632,12 @@ class _CreateEventScreenState extends State<CreateEventScreen>
     }
   }
 
-  // ─────────────────────────────────────────────
-  //  STEP 1 — BASIC INFO
-  // ─────────────────────────────────────────────
-
   Widget _buildStepBasicInfo() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionLabel('Category', Icons.category_rounded),
         const SizedBox(height: 10),
-
-        // Category grid
         _buildGlassCard(
           child: Padding(
             padding: const EdgeInsets.all(14),
@@ -751,8 +699,6 @@ class _CreateEventScreenState extends State<CreateEventScreen>
             ),
           ),
         ),
-
-        // Food Type (Dansala only)
         if (_selectedCategory == 'දන්සල') ...[
           const SizedBox(height: 20),
           _buildSectionLabel('Food Type', Icons.restaurant_rounded),
@@ -808,7 +754,6 @@ class _CreateEventScreenState extends State<CreateEventScreen>
             ),
           ),
         ],
-
         const SizedBox(height: 20),
         _buildSectionLabel('Event Details', Icons.edit_rounded),
         const SizedBox(height: 10),
@@ -844,23 +789,17 @@ class _CreateEventScreenState extends State<CreateEventScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  STEP 2 — DATE & LOCATION
-  // ─────────────────────────────────────────────
-
   Widget _buildStepDateLocation() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionLabel('When', Icons.calendar_month_rounded),
         const SizedBox(height: 10),
-
         _buildGlassCard(
           child: Padding(
             padding: const EdgeInsets.all(4),
             child: Column(
               children: [
-                // Date picker tile
                 GestureDetector(
                   onTap: _selectDate,
                   child: AbsorbPointer(
@@ -880,10 +819,7 @@ class _CreateEventScreenState extends State<CreateEventScreen>
                     ),
                   ),
                 ),
-
                 const SizedBox(height: 12),
-
-                // Time picker tile
                 GestureDetector(
                   onTap: _selectTime,
                   child: AbsorbPointer(
@@ -906,11 +842,9 @@ class _CreateEventScreenState extends State<CreateEventScreen>
             ),
           ),
         ),
-
         const SizedBox(height: 20),
         _buildSectionLabel('Where', Icons.location_on_rounded),
         const SizedBox(height: 10),
-
         _buildGlassCard(
           child: Padding(
             padding: const EdgeInsets.all(4),
@@ -939,22 +873,10 @@ class _CreateEventScreenState extends State<CreateEventScreen>
                           ),
                   ),
                 ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _contactController,
-                  keyboardType: TextInputType.phone,
-                  decoration: _inputDecoration(
-                    label: 'Contact Info (Optional)',
-                    hint: 'Phone number or email',
-                    icon: Icons.contact_phone_rounded,
-                  ),
-                ),
               ],
             ),
           ),
         ),
-
-        // GPS hint
         const SizedBox(height: 12),
         _Glass(
           borderRadius: BorderRadius.circular(14),
@@ -971,7 +893,7 @@ class _CreateEventScreenState extends State<CreateEventScreen>
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Tap  to auto-fill your current location.',
+                  'Tap 📍 to auto-fill your current location.',
                   style: TextStyle(
                       fontSize: 12, color: AppTheme.primary.withOpacity(0.85)),
                 ),
@@ -983,11 +905,9 @@ class _CreateEventScreenState extends State<CreateEventScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  STEP 3 — PHOTO & REVIEW
-  // ─────────────────────────────────────────────
-
   Widget _buildStepPhotoReview() {
+    final hasImage = _selectedImage != null ||
+        (_existingImageUrl != null && _existingImageUrl!.isNotEmpty);
     final canPreview = _selectedCategory != null &&
         _titleController.text.isNotEmpty &&
         _selectedDate != null &&
@@ -1004,41 +924,108 @@ class _CreateEventScreenState extends State<CreateEventScreen>
             child: Center(
               child: Column(
                 children: [
-                  ImagePickerButton(
-                    selectedImage: _selectedImage,
-                    existingImageUrl: _existingImageUrl,
-                    onImagePicked: (file) =>
-                        setState(() => _selectedImage = file),
-                    onRemoveImage: () => setState(() {
-                      _selectedImage = null;
-                      _existingImageUrl = null;
-                      _existingImagePublicId = null;
-                    }),
-                    size: 140,
-                  ),
-                  if (_existingImageUrl != null &&
-                      _existingImageUrl!.isNotEmpty &&
-                      _selectedImage == null) ...[
-                    const SizedBox(height: 10),
-                    _Glass(
-                      borderRadius: BorderRadius.circular(20),
-                      blur: 8,
-                      opacity: 0.45,
-                      tint: AppTheme.accent,
-                      border: Border.all(
-                          color: AppTheme.accent.withOpacity(0.25), width: 1),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
-                      child: const Text(
-                        '✓ Current image will be kept',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.accent,
+                  GestureDetector(
+                    onTap: _pickImage,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: 140,
+                      height: 140,
+                      decoration: BoxDecoration(
+                        color: AppTheme.surface,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: hasImage ? AppTheme.accent : AppTheme.primary,
+                          width: hasImage ? 2 : 1,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.04),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            if (_selectedImage != null)
+                              Image.file(_selectedImage!, fit: BoxFit.cover)
+                            else if (_existingImageUrl != null &&
+                                _existingImageUrl!.isNotEmpty)
+                              Image.network(_existingImageUrl!,
+                                  fit: BoxFit.cover)
+                            else
+                              Container(
+                                color: AppTheme.background,
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.add_photo_alternate,
+                                      size: 32,
+                                      color: AppTheme.primary.withOpacity(0.5),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Add Image',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color:
+                                            AppTheme.primary.withOpacity(0.5),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.3),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Center(
+                                child: Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.1),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 1),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Icon(
+                                    hasImage ? Icons.edit : Icons.add_a_photo,
+                                    size: 20,
+                                    color: AppTheme.primary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
-                  ],
+                  ),
+                  if (hasImage)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: TextButton(
+                        onPressed: () => setState(() {
+                          _selectedImage = null;
+                          _existingImageUrl = null;
+                          _existingImagePublicId = null;
+                        }),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppTheme.error,
+                        ),
+                        child: const Text('Remove Image'),
+                      ),
+                    ),
                   const SizedBox(height: 8),
                   Text(
                     'Optional — add a photo to make your event stand out',
@@ -1064,10 +1051,6 @@ class _CreateEventScreenState extends State<CreateEventScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  PREVIEW CARD
-  // ─────────────────────────────────────────────
-
   Widget _buildPreviewCard() {
     final catColor = AppConstants.getCategoryColor(_selectedCategory!);
     final catIcon = AppConstants.getCategoryIcon(_selectedCategory!);
@@ -1080,7 +1063,6 @@ class _CreateEventScreenState extends State<CreateEventScreen>
           children: [
             Row(
               children: [
-                // Category icon box
                 Container(
                   width: 52,
                   height: 52,
@@ -1093,7 +1075,6 @@ class _CreateEventScreenState extends State<CreateEventScreen>
                   ),
                 ),
                 const SizedBox(width: 12),
-
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1109,8 +1090,6 @@ class _CreateEventScreenState extends State<CreateEventScreen>
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 4),
-
-                      // Category chip
                       _Glass(
                         borderRadius: BorderRadius.circular(20),
                         blur: 4,
@@ -1186,10 +1165,6 @@ class _CreateEventScreenState extends State<CreateEventScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  BOTTOM ACTIONS
-  // ─────────────────────────────────────────────
-
   Widget _buildBottomActions() {
     return ClipRect(
       child: BackdropFilter(
@@ -1207,7 +1182,6 @@ class _CreateEventScreenState extends State<CreateEventScreen>
           ),
           child: Row(
             children: [
-              // Back button (visible from step 1+)
               if (_currentStep > 0) ...[
                 _Glass(
                   borderRadius: BorderRadius.circular(16),
@@ -1247,8 +1221,6 @@ class _CreateEventScreenState extends State<CreateEventScreen>
                 ),
                 const SizedBox(width: 12),
               ],
-
-              // Next / Submit button
               Expanded(
                 child: _Glass(
                   borderRadius: BorderRadius.circular(16),
@@ -1318,10 +1290,6 @@ class _CreateEventScreenState extends State<CreateEventScreen>
       ),
     );
   }
-
-  // ─────────────────────────────────────────────
-  //  SHARED WIDGETS
-  // ─────────────────────────────────────────────
 
   Widget _buildSectionLabel(String label, IconData icon) {
     return Row(

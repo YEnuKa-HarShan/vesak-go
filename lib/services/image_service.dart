@@ -18,7 +18,6 @@ class ImageService {
         maxHeight: 1200,
         imageQuality: 85,
       );
-
       if (pickedFile != null) {
         return File(pickedFile.path);
       }
@@ -33,7 +32,6 @@ class ImageService {
     try {
       final tempDir = await getTemporaryDirectory();
       final targetPath = '${tempDir.path}/${_uuid.v4()}.jpg';
-
       final result = await FlutterImageCompress.compressAndGetFile(
         imageFile.path,
         targetPath,
@@ -42,7 +40,6 @@ class ImageService {
         minHeight: 800,
         format: CompressFormat.jpeg,
       );
-
       if (result != null) {
         return File(result.path);
       }
@@ -59,6 +56,7 @@ class ImageService {
       final fileExtension = compressedFile.path.split('.').last;
       final fileName = 'events/$eventId/${_uuid.v4()}.$fileExtension';
 
+      // This will auto-create bucket if it doesn't exist
       await _supabase.storage.from('event-images').upload(
             fileName,
             compressedFile,
@@ -74,9 +72,10 @@ class ImageService {
     }
   }
 
-  Future<bool> deleteImage(String publicUrl) async {
+  Future<bool> deleteImage(String imageUrl) async {
     try {
-      final path = publicUrl.split('/event-images/').last;
+      if (imageUrl.isEmpty) return true;
+      final path = imageUrl.split('/event-images/').last;
       await _supabase.storage.from('event-images').remove([path]);
       return true;
     } catch (e) {
@@ -86,10 +85,10 @@ class ImageService {
   }
 
   Future<String?> updateImage(
-      File imageFile, String eventId, String? oldPublicId) async {
+      File imageFile, String eventId, String? oldImageUrl) async {
     try {
-      if (oldPublicId != null && oldPublicId.isNotEmpty) {
-        await deleteImage(oldPublicId);
+      if (oldImageUrl != null && oldImageUrl.isNotEmpty) {
+        await deleteImage(oldImageUrl);
       }
       return await uploadImage(imageFile, eventId);
     } catch (e) {

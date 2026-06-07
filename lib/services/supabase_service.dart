@@ -14,6 +14,10 @@ class SupabaseService {
     return digest.toString();
   }
 
+  // ============================================
+  // AUTH / USER MANAGEMENT
+  // ============================================
+
   Future<bool> registerUser({
     required String firstName,
     required String lastName,
@@ -135,7 +139,6 @@ class SupabaseService {
       };
 
       await _supabase.from('users').update(updatedUser).eq('id', userId);
-
       return true;
     } catch (e) {
       print('Update profile error: $e');
@@ -162,17 +165,19 @@ class SupabaseService {
       }
 
       final newHash = _hashPassword(newPassword);
-
       await _supabase
           .from('users')
           .update({'password_hash': newHash}).eq('id', userId);
-
       return true;
     } catch (e) {
       print('Change password error: $e');
       return false;
     }
   }
+
+  // ============================================
+  // EVENTS CRUD
+  // ============================================
 
   Future<bool> createEvent({
     required String category,
@@ -188,6 +193,8 @@ class SupabaseService {
     required String imageUrl,
     required String imagePublicId,
     String? description,
+    String? district,
+    String? province,
   }) async {
     try {
       final newEvent = {
@@ -205,49 +212,16 @@ class SupabaseService {
         'food_type': foodType,
         'image_url': imageUrl,
         'image_public_id': imagePublicId,
+        'district': district,
+        'province': province,
       };
 
       await _supabase.from('events').insert(newEvent);
-
       await _addXpAndReturnUser(userId, 50, 'event_created');
-
       return true;
     } catch (e) {
       print('Create event error: $e');
       return false;
-    }
-  }
-
-  Future<UserModel?> _addXpAndReturnUser(
-      String userId, int xpAmount, String reason) async {
-    try {
-      final user =
-          await _supabase.from('users').select().eq('id', userId).maybeSingle();
-
-      if (user != null) {
-        final currentXp = user['total_xp'] as int;
-        final newXp = currentXp + xpAmount;
-        final newLevel = AppConstants.calculateLevelFromXp(newXp);
-
-        await _supabase.from('users').update({
-          'total_xp': newXp,
-          'current_level': newLevel,
-        }).eq('id', userId);
-
-        final updatedUser = await _supabase
-            .from('users')
-            .select()
-            .eq('id', userId)
-            .maybeSingle();
-
-        if (updatedUser != null) {
-          return UserModel.fromJson(updatedUser);
-        }
-      }
-      return null;
-    } catch (e) {
-      print('Add XP error: $e');
-      return null;
     }
   }
 
@@ -264,6 +238,8 @@ class SupabaseService {
     required String foodType,
     required String imageUrl,
     required String imagePublicId,
+    String? district,
+    String? province,
   }) async {
     try {
       final updatedEvent = {
@@ -278,10 +254,11 @@ class SupabaseService {
         'food_type': foodType,
         'image_url': imageUrl,
         'image_public_id': imagePublicId,
+        'district': district,
+        'province': province,
       };
 
       await _supabase.from('events').update(updatedEvent).eq('id', eventId);
-
       return true;
     } catch (e) {
       print('Update event error: $e');
@@ -291,33 +268,17 @@ class SupabaseService {
 
   Future<bool> deleteEvent(String eventId) async {
     try {
-      // First get the event to delete its image
-      final event = await _supabase
-          .from('events')
-          .select('image_public_id')
-          .eq('id', eventId)
-          .maybeSingle();
-
-      if (event != null &&
-          event['image_public_id'] != null &&
-          event['image_public_id'].toString().isNotEmpty) {
-        try {
-          await _supabase.storage
-              .from('event-images')
-              .remove([event['image_public_id']]);
-        } catch (e) {
-          print('Error deleting image from storage: $e');
-        }
-      }
-
       await _supabase.from('events').delete().eq('id', eventId);
-
       return true;
     } catch (e) {
       print('Delete event error: $e');
       return false;
     }
   }
+
+  // ============================================
+  // GET EVENTS
+  // ============================================
 
   Future<List<EventModel>> getAllEvents() async {
     try {
@@ -345,8 +306,7 @@ class SupabaseService {
     try {
       final response = await _supabase
           .from('events')
-          .select(
-              'id, category, title, date, time, location, latitude, longitude, created_by, food_type, image_url')
+          .select('*')
           .order('created_at', ascending: false);
 
       List<EventModel> events = [];
@@ -363,18 +323,22 @@ class SupabaseService {
             id: json['id'] ?? '',
             category: json['category'] ?? 'තොරණ',
             title: json['title'] ?? 'Untitled',
-            description: null,
+            description: json['description'] ?? '',
             date: json['date'] ?? '',
             time: json['time'] ?? '',
             location: json['location'] ?? '',
-            userId: '',
+            userId: json['user_id'] ?? '',
             createdBy: json['created_by'] ?? 'Unknown',
-            createdAt: DateTime.now(),
+            createdAt: json['created_at'] != null
+                ? DateTime.parse(json['created_at'])
+                : DateTime.now(),
             latitude: latitude,
             longitude: longitude,
             foodType: json['food_type'] ?? 'none',
             imageUrl: json['image_url'] ?? '',
-            imagePublicId: '',
+            imagePublicId: json['image_public_id'] ?? '',
+            district: json['district'],
+            province: json['province'],
           ));
         } catch (e) {
           print('Error parsing map event: $e');
@@ -413,7 +377,6 @@ class SupabaseService {
   Future<int> getEventsCount() async {
     try {
       final List<dynamic> response = await _supabase.from('events').select();
-
       return response.length;
     } catch (e) {
       print('Get events count error: $e');
@@ -424,7 +387,6 @@ class SupabaseService {
   Future<int> getStoriesCount() async {
     try {
       final List<dynamic> response = await _supabase.from('stories').select();
-
       return response.length;
     } catch (e) {
       print('Get stories count error: $e');
@@ -432,22 +394,34 @@ class SupabaseService {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getLeaderboard() async {
+  // ============================================
+  // DISTRICT & PROVINCE FILTERING
+  // ============================================
+
+  Future<List<String>> getDistinctDistricts() async {
     try {
       final response = await _supabase
-          .from('users')
-          .select('first_name, last_name, total_xp, current_level')
-          .order('total_xp', ascending: false)
-          .limit(10);
+          .from('events')
+          .select('district')
+          .not('district', 'is', null);
 
-      return response;
+      final districts = response
+          .map((e) => e['district'] as String)
+          .where((d) => d.isNotEmpty)
+          .toSet()
+          .toList();
+      districts.sort();
+      return districts;
     } catch (e) {
-      print('Get leaderboard error: $e');
+      print('Get distinct districts error: $e');
       return [];
     }
   }
 
-  // Bookmark methods
+  // ============================================
+  // BOOKMARKS
+  // ============================================
+
   Future<bool> addBookmark(String userId, String eventId) async {
     try {
       final existing = await _supabase
@@ -520,6 +494,58 @@ class SupabaseService {
     } catch (e) {
       print('Get bookmarked events error: $e');
       return [];
+    }
+  }
+
+  // ============================================
+  // LEADERBOARD & XP
+  // ============================================
+
+  Future<List<Map<String, dynamic>>> getLeaderboard() async {
+    try {
+      final response = await _supabase
+          .from('users')
+          .select('first_name, last_name, total_xp, current_level')
+          .order('total_xp', ascending: false)
+          .limit(10);
+
+      return response;
+    } catch (e) {
+      print('Get leaderboard error: $e');
+      return [];
+    }
+  }
+
+  Future<UserModel?> _addXpAndReturnUser(
+      String userId, int xpAmount, String reason) async {
+    try {
+      final user =
+          await _supabase.from('users').select().eq('id', userId).maybeSingle();
+
+      if (user != null) {
+        final currentXp = user['total_xp'] as int;
+        final newXp = currentXp + xpAmount;
+        final newLevel = AppConstants.calculateLevelFromXp(newXp);
+
+        await _supabase.from('users').update({
+          'total_xp': newXp,
+          'current_level': newLevel,
+        }).eq('id', userId);
+
+        final updatedUser = await _supabase
+            .from('users')
+            .select()
+            .eq('id', userId)
+            .maybeSingle();
+
+        if (updatedUser != null) {
+          return UserModel.fromJson(updatedUser);
+        }
+      }
+      return null;
+    } catch (e) {
+      print('Add XP error: $e');
+      return null;
     }
   }
 }

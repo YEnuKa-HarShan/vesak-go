@@ -16,7 +16,7 @@ import 'map_screen.dart';
 import 'memories_screen.dart';
 
 // ─────────────────────────────────────────────────────────────
-//  Glass helper (same as MemoriesScreen)
+//  Glass helper
 // ─────────────────────────────────────────────────────────────
 
 class _Glass extends StatelessWidget {
@@ -77,6 +77,7 @@ class _HomeScreenState extends State<HomeScreen>
   final SessionService _sessionService = SessionService();
 
   bool _isLoading = true;
+  bool _initialized = false;
   int _eventsCount = 0;
   int _storiesCount = 0;
   List<EventModel> _upcomingEvents = [];
@@ -91,13 +92,20 @@ class _HomeScreenState extends State<HomeScreen>
   void initState() {
     super.initState();
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.dark);
-    _sessionService.addListener(_onSessionChanged);
+
+    // Initialize animation controller
     _fadeController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 400),
+      duration: const Duration(milliseconds: 500),
     );
-    _loadData();
-    _startCarouselTimer();
+
+    // Add session listener FIRST
+    _sessionService.addListener(_onSessionChanged);
+
+    // Load data after a short delay to ensure everything is ready
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeAndLoad();
+    });
   }
 
   @override
@@ -109,11 +117,21 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   void _onSessionChanged() {
-    setState(() {});
-    _loadData();
+    if (mounted) {
+      // Refresh data when session changes (login/logout)
+      _loadData();
+    }
+  }
+
+  Future<void> _initializeAndLoad() async {
+    // Ensure session service is initialized
+    await Future.delayed(const Duration(milliseconds: 100));
+    await _loadData();
   }
 
   void _startCarouselTimer() {
+    if (!mounted || _upcomingEvents.isEmpty) return;
+
     Future.delayed(const Duration(seconds: 5), () {
       if (mounted && _upcomingEvents.length > 1) {
         if (_currentCarouselPage < _upcomingEvents.length - 1) {
@@ -129,41 +147,82 @@ class _HomeScreenState extends State<HomeScreen>
           );
         }
         _startCarouselTimer();
+      } else if (_upcomingEvents.isNotEmpty) {
+        _startCarouselTimer();
       }
     });
   }
 
   Future<void> _loadData() async {
-    setState(() => _isLoading = true);
-
-    final eventsCount = await _supabaseService.getEventsCount();
-    final storiesCount = await _supabaseService.getStoriesCount();
-    final allEvents = await _supabaseService.getAllEvents();
-
-    final now = DateTime.now();
-    final upcoming = allEvents
-        .where((event) {
-          try {
-            final eventDate = DateTime.parse(event.date);
-            return eventDate.isAfter(now.subtract(const Duration(days: 1)));
-          } catch (e) {
-            return false;
-          }
-        })
-        .take(5)
-        .toList();
+    if (!mounted) return;
 
     setState(() {
-      _eventsCount = eventsCount;
-      _storiesCount = storiesCount;
-      _upcomingEvents = upcoming;
-      _isLoading = false;
+      _isLoading = true;
     });
 
-    _fadeController.forward(from: 0.0);
+    try {
+      // Load events count
+      final eventsCount = await _supabaseService.getEventsCount();
+
+      // Load stories count
+      final storiesCount = await _supabaseService.getStoriesCount();
+
+      // Load all events for upcoming
+      final allEvents = await _supabaseService.getAllEvents();
+
+      final now = DateTime.now();
+      final upcoming = allEvents
+          .where((event) {
+            try {
+              final eventDate = DateTime.parse(event.date);
+              return eventDate.isAfter(now.subtract(const Duration(days: 1)));
+            } catch (e) {
+              return false;
+            }
+          })
+          .take(5)
+          .toList();
+
+      if (mounted) {
+        setState(() {
+          _eventsCount = eventsCount;
+          _storiesCount = storiesCount;
+          _upcomingEvents = upcoming;
+          _isLoading = false;
+          _initialized = true;
+        });
+
+        // Start carousel timer only if we have events
+        if (_upcomingEvents.isNotEmpty) {
+          _startCarouselTimer();
+        }
+
+        // Start fade animation
+        _fadeController.forward(from: 0.0);
+      }
+    } catch (e) {
+      print('Error loading home data: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _initialized = true;
+        });
+      }
+    }
   }
 
   Future<void> _handleCreateEvent() async {
+    if (!_sessionService.isLoggedIn) {
+      final result = await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+      );
+      if (result == true && mounted) {
+        await _loadData();
+      }
+      return;
+    }
+
     if (_sessionService.canCreateEvent()) {
       final result = await Navigator.push(
         context,
@@ -174,12 +233,9 @@ class _HomeScreenState extends State<HomeScreen>
           ),
         ),
       );
-      if (result == true) _loadData();
-    } else {
-      await Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => const LoginScreen()),
-      );
+      if (result == true && mounted) {
+        await _loadData();
+      }
     }
   }
 
@@ -192,6 +248,8 @@ class _HomeScreenState extends State<HomeScreen>
 
   double _getXpProgress() {
     if (!_sessionService.isLoggedIn) return 0;
+    if (_sessionService.currentUser == null) return 0;
+
     final user = _sessionService.currentUser!;
     final currentXp = user.totalXp;
     final currentLevel = user.currentLevel;
@@ -200,7 +258,7 @@ class _HomeScreenState extends State<HomeScreen>
     final xpForNextLevel = nextLevelXp - currentLevelXp;
     final xpInCurrentLevel = currentXp - currentLevelXp;
     if (xpForNextLevel <= 0) return 0;
-    return xpInCurrentLevel / xpForNextLevel;
+    return (xpInCurrentLevel / xpForNextLevel).clamp(0.0, 1.0);
   }
 
   // ─────────────────────────────────────────────
@@ -209,6 +267,30 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Show loading indicator while initializing
+    if (!_initialized || _isLoading) {
+      return Scaffold(
+        backgroundColor: AppTheme.background,
+        body: Stack(
+          children: [
+            _buildAmbientBlobs(),
+            const Center(
+              child: _Glass(
+                borderRadius: BorderRadius.all(Radius.circular(20)),
+                opacity: 0.55,
+                tint: Colors.white,
+                padding: EdgeInsets.all(24),
+                child: CircularProgressIndicator(
+                  color: AppTheme.primary,
+                  strokeWidth: 2.5,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppTheme.background,
       body: Stack(
@@ -336,7 +418,7 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   // ─────────────────────────────────────────────
-  // HEADER  (glass — replaces gradient banner)
+  // HEADER
   // ─────────────────────────────────────────────
 
   Widget _buildHeader() {
@@ -372,7 +454,8 @@ class _HomeScreenState extends State<HomeScreen>
                       height: 48,
                       child: Center(
                         child: Text(
-                          _sessionService.isLoggedIn
+                          _sessionService.isLoggedIn &&
+                                  _sessionService.currentUser != null
                               ? '${_sessionService.currentUser!.firstName[0]}${_sessionService.currentUser!.lastName[0]}'
                               : 'G',
                           style: const TextStyle(
@@ -400,7 +483,8 @@ class _HomeScreenState extends State<HomeScreen>
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          _sessionService.isLoggedIn
+                          _sessionService.isLoggedIn &&
+                                  _sessionService.currentUser != null
                               ? _sessionService.currentUser!.firstName
                               : 'Guest User',
                           style: const TextStyle(
@@ -423,7 +507,8 @@ class _HomeScreenState extends State<HomeScreen>
               ),
 
               // ── League pill (logged in only) ──
-              if (_sessionService.isLoggedIn) ...[
+              if (_sessionService.isLoggedIn &&
+                  _sessionService.currentUser != null) ...[
                 const SizedBox(height: 14),
                 _Glass(
                   borderRadius: BorderRadius.circular(20),
@@ -504,46 +589,33 @@ class _HomeScreenState extends State<HomeScreen>
   Widget _buildQuickStatsSection() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: _isLoading
-          ? Center(
-              child: _Glass(
-                borderRadius: BorderRadius.circular(20),
-                opacity: 0.55,
-                tint: Colors.white,
-                padding: const EdgeInsets.all(20),
-                child: const CircularProgressIndicator(
-                  color: AppTheme.primary,
-                  strokeWidth: 2.5,
-                ),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const EventsScreen()),
               ),
-            )
-          : Row(
-              children: [
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const EventsScreen()),
-                    ),
-                    child: _buildStatCard(
-                      icon: Icons.event_rounded,
-                      iconColor: AppTheme.primary,
-                      count: _eventsCount.toString(),
-                      label: 'Events',
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildStatCard(
-                    icon: Icons.auto_stories_rounded,
-                    iconColor: AppTheme.accent,
-                    count: _storiesCount.toString(),
-                    label: 'Stories',
-                  ),
-                ),
-              ],
+              child: _buildStatCard(
+                icon: Icons.event_rounded,
+                iconColor: AppTheme.primary,
+                count: _eventsCount.toString(),
+                label: 'Events',
+              ),
             ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _buildStatCard(
+              icon: Icons.auto_stories_rounded,
+              iconColor: AppTheme.accent,
+              count: _storiesCount.toString(),
+              label: 'Stories',
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -617,6 +689,8 @@ class _HomeScreenState extends State<HomeScreen>
   // ─────────────────────────────────────────────
 
   Widget _buildXpProgressCard() {
+    if (_sessionService.currentUser == null) return const SizedBox.shrink();
+
     final user = _sessionService.currentUser!;
     final progress = _getXpProgress();
     final currentLevel = user.currentLevel;
@@ -868,6 +942,7 @@ class _HomeScreenState extends State<HomeScreen>
                       context,
                       MaterialPageRoute(builder: (_) => const LoginScreen()),
                     );
+                    await _loadData();
                   },
                   accent: AppTheme.error,
                 ),
@@ -978,6 +1053,8 @@ class _HomeScreenState extends State<HomeScreen>
   // ─────────────────────────────────────────────
 
   Widget _buildFeaturedEventsCarousel() {
+    if (_upcomingEvents.isEmpty) return const SizedBox.shrink();
+
     return Column(
       children: [
         SizedBox(
@@ -1030,13 +1107,7 @@ class _HomeScreenState extends State<HomeScreen>
   // ─────────────────────────────────────────────
 
   Widget _buildQuoteCard() {
-    final quotes = [
-      '"Happiness never decreases by being shared." — Buddha',
-      '"Peace comes from within. Do not seek it without." — Buddha',
-      '"The mind is everything. What you think you become." — Buddha',
-      '"Thousands of candles can be lit from a single candle." — Buddha',
-      '"Better than a thousand hollow words is one word that brings peace." — Buddha',
-    ];
+    final quotes = AppConstants.buddhistQuotes;
     final quote = quotes[DateTime.now().day % quotes.length];
 
     return ClipRRect(
@@ -1094,14 +1165,18 @@ class _HomeScreenState extends State<HomeScreen>
   // ─────────────────────────────────────────────
 
   Widget _buildUpcomingEventsList() {
+    final displayEvents = _upcomingEvents.length > 3
+        ? _upcomingEvents.sublist(0, 3)
+        : _upcomingEvents;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: ListView.builder(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        itemCount: _upcomingEvents.length > 3 ? 3 : _upcomingEvents.length,
+        itemCount: displayEvents.length,
         itemBuilder: (context, index) {
-          final event = _upcomingEvents[index];
+          final event = displayEvents[index];
           final categoryColor = AppConstants.getCategoryColor(event.category);
           final icon = event.getMarkerIcon();
 
