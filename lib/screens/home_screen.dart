@@ -15,10 +15,6 @@ import 'profile_screen.dart';
 import 'map_screen.dart';
 import 'memories_screen.dart';
 
-// ─────────────────────────────────────────────────────────────
-//  Glass helper
-// ─────────────────────────────────────────────────────────────
-
 class _Glass extends StatelessWidget {
   final Widget child;
   final BorderRadius? borderRadius;
@@ -60,10 +56,6 @@ class _Glass extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Screen
-// ─────────────────────────────────────────────────────────────
-
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -77,7 +69,7 @@ class _HomeScreenState extends State<HomeScreen>
   final SessionService _sessionService = SessionService();
 
   bool _isLoading = true;
-  bool _initialized = false;
+  bool _isSessionReady = false;
   int _eventsCount = 0;
   int _storiesCount = 0;
   List<EventModel> _upcomingEvents = [];
@@ -93,19 +85,16 @@ class _HomeScreenState extends State<HomeScreen>
     super.initState();
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.dark);
 
-    // Initialize animation controller
     _fadeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 500),
     );
 
-    // Add session listener FIRST
+    // Add listener FIRST
     _sessionService.addListener(_onSessionChanged);
 
-    // Load data after a short delay to ensure everything is ready
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initializeAndLoad();
-    });
+    // Check session and load
+    _checkSessionAndLoad();
   }
 
   @override
@@ -117,16 +106,34 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   void _onSessionChanged() {
-    if (mounted) {
-      // Refresh data when session changes (login/logout)
+    if (mounted && _sessionService.isInitialized) {
+      setState(() {
+        _isSessionReady = true;
+      });
       _loadData();
     }
   }
 
-  Future<void> _initializeAndLoad() async {
-    // Ensure session service is initialized
-    await Future.delayed(const Duration(milliseconds: 100));
-    await _loadData();
+  Future<void> _checkSessionAndLoad() async {
+    // Show loading immediately
+    setState(() {
+      _isLoading = true;
+      _isSessionReady = false;
+    });
+
+    // Wait for session to be initialized
+    int retryCount = 0;
+    while (!_sessionService.isInitialized && retryCount < 20) {
+      await Future.delayed(const Duration(milliseconds: 100));
+      retryCount++;
+    }
+
+    if (mounted) {
+      setState(() {
+        _isSessionReady = _sessionService.isInitialized;
+      });
+      await _loadData();
+    }
   }
 
   void _startCarouselTimer() {
@@ -156,18 +163,9 @@ class _HomeScreenState extends State<HomeScreen>
   Future<void> _loadData() async {
     if (!mounted) return;
 
-    setState(() {
-      _isLoading = true;
-    });
-
     try {
-      // Load events count
       final eventsCount = await _supabaseService.getEventsCount();
-
-      // Load stories count
       final storiesCount = await _supabaseService.getStoriesCount();
-
-      // Load all events for upcoming
       final allEvents = await _supabaseService.getAllEvents();
 
       final now = DateTime.now();
@@ -189,15 +187,12 @@ class _HomeScreenState extends State<HomeScreen>
           _storiesCount = storiesCount;
           _upcomingEvents = upcoming;
           _isLoading = false;
-          _initialized = true;
         });
 
-        // Start carousel timer only if we have events
         if (_upcomingEvents.isNotEmpty) {
           _startCarouselTimer();
         }
 
-        // Start fade animation
         _fadeController.forward(from: 0.0);
       }
     } catch (e) {
@@ -205,7 +200,6 @@ class _HomeScreenState extends State<HomeScreen>
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _initialized = true;
         });
       }
     }
@@ -223,7 +217,8 @@ class _HomeScreenState extends State<HomeScreen>
       return;
     }
 
-    if (_sessionService.canCreateEvent()) {
+    if (_sessionService.canCreateEvent() &&
+        _sessionService.currentUser != null) {
       final result = await Navigator.push(
         context,
         MaterialPageRoute(
@@ -261,14 +256,10 @@ class _HomeScreenState extends State<HomeScreen>
     return (xpInCurrentLevel / xpForNextLevel).clamp(0.0, 1.0);
   }
 
-  // ─────────────────────────────────────────────
-  // BUILD ROOT
-  // ─────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
-    // Show loading indicator while initializing
-    if (!_initialized || _isLoading) {
+    // CRITICAL: Show loading until session is ready AND data is loaded
+    if (!_isSessionReady || _isLoading) {
       return Scaffold(
         backgroundColor: AppTheme.background,
         body: Stack(
@@ -295,9 +286,7 @@ class _HomeScreenState extends State<HomeScreen>
       backgroundColor: AppTheme.background,
       body: Stack(
         children: [
-          // ── Ambient blobs ──
           _buildAmbientBlobs(),
-
           SafeArea(
             child: Column(
               children: [
@@ -319,7 +308,8 @@ class _HomeScreenState extends State<HomeScreen>
                             const SizedBox(height: 20),
                             _buildQuickStatsSection(),
                             const SizedBox(height: 20),
-                            if (_sessionService.isLoggedIn) ...[
+                            if (_sessionService.isLoggedIn &&
+                                _sessionService.currentUser != null) ...[
                               _buildXpProgressCard(),
                               const SizedBox(height: 20),
                             ],
@@ -370,10 +360,6 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  // AMBIENT BLOBS
-  // ─────────────────────────────────────────────
-
   Widget _buildAmbientBlobs() {
     return Stack(
       children: [
@@ -417,10 +403,6 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  // HEADER
-  // ─────────────────────────────────────────────
-
   Widget _buildHeader() {
     return ClipRect(
       child: BackdropFilter(
@@ -441,7 +423,6 @@ class _HomeScreenState extends State<HomeScreen>
             children: [
               Row(
                 children: [
-                  // ── Avatar ──
                   _Glass(
                     borderRadius: BorderRadius.circular(50),
                     blur: 12,
@@ -468,8 +449,6 @@ class _HomeScreenState extends State<HomeScreen>
                     ),
                   ),
                   const SizedBox(width: 14),
-
-                  // ── Greeting ──
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -497,16 +476,12 @@ class _HomeScreenState extends State<HomeScreen>
                       ],
                     ),
                   ),
-
-                  // ── Notification icon ──
                   _buildGlassIconButton(
                     icon: Icons.notifications_none_rounded,
                     onPressed: () {},
                   ),
                 ],
               ),
-
-              // ── League pill (logged in only) ──
               if (_sessionService.isLoggedIn &&
                   _sessionService.currentUser != null) ...[
                 const SizedBox(height: 14),
@@ -581,10 +556,6 @@ class _HomeScreenState extends State<HomeScreen>
       ),
     );
   }
-
-  // ─────────────────────────────────────────────
-  // QUICK STATS
-  // ─────────────────────────────────────────────
 
   Widget _buildQuickStatsSection() {
     return Padding(
@@ -683,10 +654,6 @@ class _HomeScreenState extends State<HomeScreen>
       ),
     );
   }
-
-  // ─────────────────────────────────────────────
-  // XP PROGRESS CARD
-  // ─────────────────────────────────────────────
 
   Widget _buildXpProgressCard() {
     if (_sessionService.currentUser == null) return const SizedBox.shrink();
@@ -853,10 +820,6 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  // QUICK ACTIONS GRID
-  // ─────────────────────────────────────────────
-
   Widget _buildQuickActionsSection() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1007,10 +970,6 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  // SECTION HEADER
-  // ─────────────────────────────────────────────
-
   Widget _buildSectionHeader(String title, {required VoidCallback onTap}) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1048,10 +1007,6 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  // FEATURED EVENTS CAROUSEL
-  // ─────────────────────────────────────────────
-
   Widget _buildFeaturedEventsCarousel() {
     if (_upcomingEvents.isEmpty) return const SizedBox.shrink();
 
@@ -1079,7 +1034,6 @@ class _HomeScreenState extends State<HomeScreen>
           ),
         ),
         const SizedBox(height: 10),
-        // Dot indicator
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: List.generate(_upcomingEvents.length, (i) {
@@ -1101,10 +1055,6 @@ class _HomeScreenState extends State<HomeScreen>
       ],
     );
   }
-
-  // ─────────────────────────────────────────────
-  // QUOTE CARD
-  // ─────────────────────────────────────────────
 
   Widget _buildQuoteCard() {
     final quotes = AppConstants.buddhistQuotes;
@@ -1159,10 +1109,6 @@ class _HomeScreenState extends State<HomeScreen>
       ),
     );
   }
-
-  // ─────────────────────────────────────────────
-  // UPCOMING EVENTS LIST
-  // ─────────────────────────────────────────────
 
   Widget _buildUpcomingEventsList() {
     final displayEvents = _upcomingEvents.length > 3
@@ -1283,10 +1229,6 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  // EVENT DETAILS BOTTOM SHEET
-  // ─────────────────────────────────────────────
-
   void _showEventDetails(EventModel event) {
     showModalBottomSheet(
       context: context,
@@ -1310,7 +1252,6 @@ class _HomeScreenState extends State<HomeScreen>
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Handle
                 Center(
                   child: Container(
                     width: 40,
