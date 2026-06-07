@@ -33,6 +33,11 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
   bool _isBookmarked = false;
   bool _isLoading = false;
   bool _hasMemory = false;
+  bool _hasVisited = false;
+  bool _isMarkingVisited = false;
+  int _totalVisits = 0;
+  int _totalMemories = 0;
+  int _totalBookmarks = 0;
 
   late AnimationController _fadeController;
 
@@ -46,12 +51,32 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
     );
     _checkStatus();
     _checkMemory();
+    _checkVisited();
+    _loadStats();
   }
 
   @override
   void dispose() {
     _fadeController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadStats() async {
+    final stats = await _supabaseService.getEventStats(widget.event.id);
+    setState(() {
+      _totalVisits = stats['total_visits'] ?? 0;
+      _totalMemories = stats['total_memories'] ?? 0;
+      _totalBookmarks = stats['total_bookmarks'] ?? 0;
+    });
+  }
+
+  Future<void> _checkVisited() async {
+    if (!_sessionService.isLoggedIn) return;
+    final visited = await _supabaseService.hasUserVisitedEvent(
+      widget.event.id,
+      _sessionService.currentUser!.id,
+    );
+    setState(() => _hasVisited = visited);
   }
 
   Future<void> _checkStatus() async {
@@ -90,7 +115,10 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
         _sessionService.currentUser!.id,
         widget.event.id,
       );
-      setState(() => _isBookmarked = false);
+      setState(() {
+        _isBookmarked = false;
+        if (_totalBookmarks > 0) _totalBookmarks--;
+      });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           _buildSnackBar('Removed from bookmarks', Icons.bookmark_remove),
@@ -101,7 +129,10 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
         _sessionService.currentUser!.id,
         widget.event.id,
       );
-      setState(() => _isBookmarked = true);
+      setState(() {
+        _isBookmarked = true;
+        _totalBookmarks++;
+      });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           _buildSnackBar('Added to bookmarks', Icons.bookmark_added),
@@ -110,6 +141,33 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
     }
 
     setState(() => _isLoading = false);
+  }
+
+  Future<void> _markAsVisited() async {
+    if (!_sessionService.isLoggedIn) {
+      _showLoginRequired();
+      return;
+    }
+    if (_hasVisited) return;
+
+    setState(() => _isMarkingVisited = true);
+
+    final success = await _supabaseService.markEventAsVisited(
+      widget.event.id,
+      _sessionService.currentUser!.id,
+    );
+
+    if (success) {
+      setState(() {
+        _hasVisited = true;
+        _totalVisits++;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Marked as visited! ✓')),
+      );
+    }
+
+    setState(() => _isMarkingVisited = false);
   }
 
   Future<void> _handleMemoryAction() async {
@@ -141,6 +199,8 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
         );
         if (result == true) {
           await _checkMemory();
+          await _checkVisited();
+          await _loadStats();
         }
       }
     } else {
@@ -152,6 +212,8 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
       );
       if (result == true) {
         await _checkMemory();
+        await _checkVisited();
+        await _loadStats();
       }
     }
   }
@@ -169,10 +231,23 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
   }
 
   void _openInMaps() async {
-    final url =
-        'https://www.google.com/maps/search/?api=1&query=${widget.event.latitude},${widget.event.longitude}';
-    if (await canLaunchUrl(Uri.parse(url))) {
-      await launchUrl(Uri.parse(url));
+    final lat = widget.event.latitude;
+    final lng = widget.event.longitude;
+    final title = Uri.encodeComponent(widget.event.title);
+
+    final googleMapsAppUrl =
+        'comgooglemaps://?center=$lat,$lng&zoom=15&q=$lat,$lng($title)';
+    final googleMapsWebUrl =
+        'https://www.google.com/maps/search/?api=1&query=$lat,$lng&query_place_id=$title';
+
+    try {
+      if (await canLaunchUrl(Uri.parse(googleMapsAppUrl))) {
+        await launchUrl(Uri.parse(googleMapsAppUrl));
+      } else {
+        await launchUrl(Uri.parse(googleMapsWebUrl));
+      }
+    } catch (e) {
+      await launchUrl(Uri.parse(googleMapsWebUrl));
     }
   }
 
@@ -229,6 +304,10 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
     }
   }
 
+  bool get _isOwner =>
+      _sessionService.isLoggedIn &&
+      widget.event.userId == _sessionService.currentUser?.id;
+
   Future<void> _editEvent() async {
     final result = await Navigator.push(
       context,
@@ -278,26 +357,18 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
     final categoryColor = AppConstants.getCategoryColor(widget.event.category);
     final icon = widget.event.getMarkerIcon();
     final isActive = _isEventActive();
-    final isOwner = _sessionService.isLoggedIn &&
-        widget.event.userId == _sessionService.currentUser?.id;
 
     return Scaffold(
       backgroundColor: AppTheme.background,
       body: Stack(
         children: [
-          // Ambient Blobs
           _buildAmbientBlobs(categoryColor),
-
-          // Main Content
           CustomScrollView(
             physics: const BouncingScrollPhysics(),
             slivers: [
-              // Hero Section
               SliverToBoxAdapter(
                 child: _buildHeroSection(categoryColor, icon, isActive),
               ),
-
-              // Content Section
               SliverToBoxAdapter(
                 child: FadeTransition(
                   opacity: _fadeController,
@@ -306,33 +377,26 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Title
                         _buildTitleSection(categoryColor),
                         const SizedBox(height: 20),
-
-                        // Date & Time Card
                         _buildDateTimeCard(),
                         const SizedBox(height: 16),
-
-                        // Location Card with Map Preview
+                        _buildStatsCard(),
+                        const SizedBox(height: 16),
                         _buildLocationCard(),
                         const SizedBox(height: 16),
-
-                        // Description Card
                         if (widget.event.description != null &&
                             widget.event.description!.isNotEmpty)
                           _buildDescriptionCard(),
                         const SizedBox(height: 16),
-
-                        // Creator Info
                         _buildCreatorCard(),
                         const SizedBox(height: 24),
-
-                        // Action Buttons
-                        _buildActionButtons(isOwner),
+                        if (!_isOwner) _buildMarkAsVisitedButton(),
+                        if (!_isOwner) const SizedBox(height: 8),
+                        if (!_isOwner) _buildMemoryActionButton(),
+                        if (_isOwner) const SizedBox(height: 8),
+                        if (_isOwner) _buildOwnerActions(),
                         const SizedBox(height: 12),
-
-                        // Close Button
                         _buildCloseButton(),
                         const SizedBox(height: 20),
                       ],
@@ -342,9 +406,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
               ),
             ],
           ),
-
-          // Floating App Bar
-          SafeArea(child: _buildFloatingAppBar(isOwner)),
+          SafeArea(child: _buildFloatingAppBar()),
         ],
       ),
     );
@@ -396,9 +458,8 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
   Widget _buildHeroSection(Color categoryColor, String icon, bool isActive) {
     return Stack(
       children: [
-        // Hero Image
         SizedBox(
-          height: 320,
+          height: 300,
           width: double.infinity,
           child: widget.event.hasImage
               ? CachedNetworkImage(
@@ -411,8 +472,6 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
                 )
               : _buildHeroGradient(categoryColor, icon),
         ),
-
-        // Gradient Overlay
         Positioned.fill(
           child: Container(
             decoration: BoxDecoration(
@@ -429,8 +488,6 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
             ),
           ),
         ),
-
-        // Category Badge (Bottom Left)
         Positioned(
           bottom: 20,
           left: 16,
@@ -457,8 +514,6 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
             ),
           ),
         ),
-
-        // Food Type Badge (Bottom Left, next to category)
         if (widget.event.category == 'දන්සල' && widget.event.foodType != 'none')
           Positioned(
             bottom: 20,
@@ -478,17 +533,14 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
                   Text(
                     widget.event.foodType,
                     style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.white,
-                    ),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.white),
                   ),
                 ],
               ),
             ),
           ),
-
-        // Active Status Badge (Top Right)
         if (isActive)
           Positioned(
             top: 20,
@@ -556,7 +608,6 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
         const SizedBox(height: 12),
         Row(
           children: [
-            // Category Chip
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
@@ -690,6 +741,66 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
     );
   }
 
+  Widget _buildStatsCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.60),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.55), width: 1),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              children: [
+                Icon(Icons.check_circle_outline,
+                    size: 24, color: AppTheme.success),
+                const SizedBox(height: 4),
+                Text(
+                  _totalVisits.toString(),
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.w800),
+                ),
+                const Text('Visited', style: TextStyle(fontSize: 11)),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Column(
+              children: [
+                Icon(Icons.memory_rounded,
+                    size: 24, color: AppTheme.memoryPrimary),
+                const SizedBox(height: 4),
+                Text(
+                  _totalMemories.toString(),
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.w800),
+                ),
+                const Text('Memories', style: TextStyle(fontSize: 11)),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Column(
+              children: [
+                Icon(Icons.bookmark_outline_rounded,
+                    size: 24, color: AppTheme.accent),
+                const SizedBox(height: 4),
+                Text(
+                  _totalBookmarks.toString(),
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.w800),
+                ),
+                const Text('Saved', style: TextStyle(fontSize: 11)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildLocationCard() {
     return GestureDetector(
       onTap: _openInMaps,
@@ -737,7 +848,6 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
               ],
             ),
             const SizedBox(height: 12),
-            // Mini Map Preview
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: Container(
@@ -883,62 +993,84 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
     );
   }
 
-  Widget _buildActionButtons(bool isOwner) {
-    return Column(
+  Widget _buildMarkAsVisitedButton() {
+    if (!_sessionService.isLoggedIn) return const SizedBox.shrink();
+    if (_hasVisited || _hasMemory) return const SizedBox.shrink();
+
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: _isMarkingVisited ? null : _markAsVisited,
+        icon: _isMarkingVisited
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2))
+            : const Icon(Icons.check_circle_outline, size: 18),
+        label: const Text('Mark as Visited'),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppTheme.success,
+          side: BorderSide(color: AppTheme.success.withOpacity(0.5)),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMemoryActionButton() {
+    if (!_sessionService.isLoggedIn) return const SizedBox.shrink();
+    if (_isOwner) return const SizedBox.shrink();
+
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: _handleMemoryAction,
+        icon: Icon(_hasMemory ? Icons.edit_note_rounded : Icons.memory_rounded,
+            size: 20),
+        label: Text(_hasMemory ? 'Update Memory' : 'Add Memory'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppTheme.memoryPrimary,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOwnerActions() {
+    return Row(
       children: [
-        if (!isOwner)
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: _handleMemoryAction,
-              icon: Icon(
-                  _hasMemory ? Icons.edit_note_rounded : Icons.memory_rounded,
-                  size: 20),
-              label: Text(_hasMemory ? 'Update Memory' : 'Add Memory'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _hasMemory
-                    ? AppTheme.memoryPrimary
-                    : AppTheme.memoryPrimary,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16)),
-              ),
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: _editEvent,
+            icon: const Icon(Icons.edit_rounded, size: 18),
+            label: const Text('Edit Event'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppTheme.primary,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
             ),
           ),
-        if (isOwner) ...[
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _editEvent,
-                  icon: const Icon(Icons.edit_rounded, size: 18),
-                  label: const Text('Edit Event'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppTheme.primary,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16)),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _deleteEvent,
-                  icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                  label: const Text('Delete'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppTheme.error,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16)),
-                  ),
-                ),
-              ),
-            ],
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: _deleteEvent,
+            icon: const Icon(Icons.delete_outline_rounded, size: 18),
+            label: const Text('Delete'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppTheme.error,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+            ),
           ),
-        ],
+        ),
       ],
     );
   }
@@ -961,12 +1093,11 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
     );
   }
 
-  Widget _buildFloatingAppBar(bool isOwner) {
+  Widget _buildFloatingAppBar() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
-          // Back Button
           Container(
             width: 44,
             height: 44,
@@ -984,7 +1115,6 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
             ),
           ),
           const Spacer(),
-          // Bookmark Button
           Container(
             width: 44,
             height: 44,
@@ -1018,7 +1148,6 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
                   ),
           ),
           const SizedBox(width: 8),
-          // Share Button
           Container(
             width: 44,
             height: 44,

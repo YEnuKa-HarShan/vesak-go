@@ -9,6 +9,7 @@ import '../models/event_model.dart';
 import '../services/memory_service.dart';
 import '../services/cloudinary_service.dart';
 import '../services/session_service.dart';
+import '../services/supabase_service.dart';
 import '../widgets/media_picker_grid.dart';
 import '../theme/app_theme.dart';
 
@@ -42,6 +43,7 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
   final MemoryService _memoryService = MemoryService();
   final CloudinaryService _cloudinaryService = CloudinaryService();
   final SessionService _sessionService = SessionService();
+  final SupabaseService _supabaseService = SupabaseService();
 
   final TextEditingController _noteController = TextEditingController();
   final List<File> _selectedImages = [];
@@ -127,7 +129,6 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
   }
 
   Future<void> _pickVideo() async {
-    // Coming Soon feature
     _showComingSoonDialog();
     return;
   }
@@ -229,6 +230,7 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
       });
     };
 
+    // Upload images
     for (int i = 0; i < _selectedImages.length; i++) {
       setState(() {
         _uploadStatus = 'Uploading image ${i + 1}/${_selectedImages.length}...';
@@ -250,6 +252,7 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
       updateProgress();
     }
 
+    // Video (coming soon - placeholder)
     String finalVideoUrl = _existingVideoUrl ?? '';
     String finalVideoPublicId = _existingVideoPublicId ?? '';
 
@@ -593,7 +596,6 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
 
     return Column(
       children: [
-        // Photos Section with MediaPickerGrid
         Container(
           margin: const EdgeInsets.only(bottom: 16),
           child: ClipRRect(
@@ -638,7 +640,6 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    // INTEGRATED MEDIA PICKER GRID
                     MediaPickerGrid(
                       selectedImages: _selectedImages,
                       existingImageUrls: _existingImageUrls,
@@ -653,7 +654,6 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
             ),
           ),
         ),
-        // Video Section
         Container(
           child: ClipRRect(
             borderRadius: BorderRadius.circular(20),

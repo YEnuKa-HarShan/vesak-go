@@ -38,25 +38,28 @@ class _EventBottomSheetState extends State<EventBottomSheet> {
 
   bool _isBookmarked = false;
   bool _hasMemory = false;
+  bool _hasVisited = false;
   bool _isBookmarkLoading = false;
-  int _visitedCount = 0;
-  int _memoriesCount = 0;
-  int _savedCount = 0;
+  bool _isMarkingVisited = false;
+  int _totalVisits = 0;
+  int _totalMemories = 0;
+  int _totalBookmarks = 0;
 
   @override
   void initState() {
     super.initState();
     _checkStatus();
     _checkMemory();
+    _checkVisited();
     _loadStats();
   }
 
   Future<void> _loadStats() async {
-    final memories = await _supabaseService.getMyEvents(widget.event.userId);
+    final eventStats = await _supabaseService.getEventStats(widget.event.id);
     setState(() {
-      _visitedCount = memories.length;
-      _memoriesCount = memories.length;
-      _savedCount = _isBookmarked ? 1 : 0;
+      _totalVisits = eventStats['total_visits'] ?? 0;
+      _totalMemories = eventStats['total_memories'] ?? 0;
+      _totalBookmarks = eventStats['total_bookmarks'] ?? 0;
     });
   }
 
@@ -67,9 +70,6 @@ class _EventBottomSheetState extends State<EventBottomSheet> {
       widget.event.id,
     );
     setState(() => _isBookmarked = bookmarked);
-    if (bookmarked) {
-      setState(() => _savedCount = 1);
-    }
   }
 
   Future<void> _checkMemory() async {
@@ -79,6 +79,15 @@ class _EventBottomSheetState extends State<EventBottomSheet> {
       _sessionService.currentUser!.id,
     );
     setState(() => _hasMemory = hasMemory);
+  }
+
+  Future<void> _checkVisited() async {
+    if (!_sessionService.isLoggedIn) return;
+    final hasVisited = await _supabaseService.hasUserVisitedEvent(
+      widget.event.id,
+      _sessionService.currentUser!.id,
+    );
+    setState(() => _hasVisited = hasVisited);
   }
 
   Future<void> _toggleBookmark() async {
@@ -95,7 +104,7 @@ class _EventBottomSheetState extends State<EventBottomSheet> {
       );
       setState(() {
         _isBookmarked = false;
-        _savedCount = 0;
+        if (_totalBookmarks > 0) _totalBookmarks--;
       });
     } else {
       await _supabaseService.addBookmark(
@@ -104,12 +113,37 @@ class _EventBottomSheetState extends State<EventBottomSheet> {
       );
       setState(() {
         _isBookmarked = true;
-        _savedCount = 1;
+        _totalBookmarks++;
       });
     }
 
     setState(() => _isBookmarkLoading = false);
     widget.onBookmarkChanged?.call();
+  }
+
+  Future<void> _markAsVisited() async {
+    if (!_sessionService.isLoggedIn) {
+      _showLoginRequired();
+      return;
+    }
+    if (_hasVisited) return;
+
+    setState(() => _isMarkingVisited = true);
+
+    final success = await _supabaseService.markEventAsVisited(
+      widget.event.id,
+      _sessionService.currentUser!.id,
+    );
+
+    if (success) {
+      setState(() {
+        _hasVisited = true;
+        _totalVisits++;
+      });
+      _showSnackBar('Marked as visited! ✓', Icons.check_circle);
+    }
+
+    setState(() => _isMarkingVisited = false);
   }
 
   Future<void> _handleMemoryAction() async {
@@ -139,6 +173,9 @@ class _EventBottomSheetState extends State<EventBottomSheet> {
             ),
           ),
         );
+        await _loadStats();
+        await _checkMemory();
+        await _checkVisited();
       }
     } else {
       await Navigator.push(
@@ -147,8 +184,29 @@ class _EventBottomSheetState extends State<EventBottomSheet> {
           builder: (_) => CreateMemoryScreen(event: widget.event),
         ),
       );
+      await _loadStats();
+      await _checkMemory();
+      await _checkVisited();
     }
     widget.onMemoryChanged?.call();
+  }
+
+  void _showSnackBar(String message, IconData icon) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(icon, color: Colors.white, size: 16),
+            const SizedBox(width: 8),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: AppTheme.success,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   void _openFullDetails() {
@@ -170,18 +228,11 @@ class _EventBottomSheetState extends State<EventBottomSheet> {
     final lng = widget.event.longitude;
     final title = Uri.encodeComponent(widget.event.title);
 
-    // Google Maps App URL
     final googleMapsAppUrl =
         'comgooglemaps://?center=$lat,$lng&zoom=15&q=$lat,$lng($title)';
-
-    // Google Maps Web URL
     final googleMapsWebUrl =
         'https://www.google.com/maps/search/?api=1&query=$lat,$lng&query_place_id=$title';
-
-    // Geo URI
     final geoUrl = 'geo:$lat,$lng?q=$lat,$lng($title)';
-
-    // Waze App URL
     final wazeUrl = 'waze://?ll=$lat,$lng&navigate=yes';
 
     try {
@@ -301,6 +352,8 @@ class _EventBottomSheetState extends State<EventBottomSheet> {
     final categoryEnglish = _getCategoryEnglish();
     final statusConfig = _getStatusConfig();
     final hasImage = widget.event.hasImage;
+    final canMarkVisited =
+        _sessionService.isLoggedIn && !_hasVisited && !_hasMemory;
 
     return DraggableScrollableSheet(
       initialChildSize: 0.7,
@@ -349,9 +402,11 @@ class _EventBottomSheetState extends State<EventBottomSheet> {
                                 widget.event.description!.isNotEmpty)
                               _buildDescriptionSection(),
                             const SizedBox(height: 16),
+                            _buildActionButtons(canMarkVisited),
+                            const SizedBox(height: 16),
                             _buildAddMemoryButton(),
                             const SizedBox(height: 16),
-                            _buildActionButtons(),
+                            _buildCloseButtons(),
                           ],
                         ),
                       ),
@@ -579,7 +634,7 @@ class _EventBottomSheetState extends State<EventBottomSheet> {
       children: [
         Expanded(
           child: _StatCard(
-            value: _visitedCount,
+            value: _totalVisits,
             label: 'Visited',
             icon: Icons.check_circle_outline,
             color: AppTheme.success,
@@ -588,7 +643,7 @@ class _EventBottomSheetState extends State<EventBottomSheet> {
         const SizedBox(width: 12),
         Expanded(
           child: _StatCard(
-            value: _memoriesCount,
+            value: _totalMemories,
             label: 'Memories',
             icon: Icons.memory_rounded,
             color: AppTheme.memoryPrimary,
@@ -597,7 +652,7 @@ class _EventBottomSheetState extends State<EventBottomSheet> {
         const SizedBox(width: 12),
         Expanded(
           child: _StatCard(
-            value: _savedCount,
+            value: _totalBookmarks,
             label: 'Saved',
             icon: Icons.bookmark_outline_rounded,
             color: AppTheme.accent,
@@ -698,6 +753,56 @@ class _EventBottomSheetState extends State<EventBottomSheet> {
     );
   }
 
+  Widget _buildActionButtons(bool canMarkVisited) {
+    if (!_sessionService.isLoggedIn) return const SizedBox.shrink();
+
+    return Column(
+      children: [
+        if (canMarkVisited)
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _isMarkingVisited ? null : _markAsVisited,
+              icon: _isMarkingVisited
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.check_circle_outline, size: 18),
+              label: const Text('Mark as Visited'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.success,
+                side: BorderSide(color: AppTheme.success.withOpacity(0.5)),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ),
+        if (_hasVisited && !_hasMemory)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              decoration: BoxDecoration(
+                color: AppTheme.success.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: const [
+                  Icon(Icons.check_circle, size: 16, color: AppTheme.success),
+                  SizedBox(width: 8),
+                  Text('You visited this event',
+                      style: TextStyle(fontSize: 13, color: AppTheme.success)),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _buildAddMemoryButton() {
     return SizedBox(
       width: double.infinity,
@@ -719,7 +824,7 @@ class _EventBottomSheetState extends State<EventBottomSheet> {
     );
   }
 
-  Widget _buildActionButtons() {
+  Widget _buildCloseButtons() {
     return Row(
       children: [
         Expanded(

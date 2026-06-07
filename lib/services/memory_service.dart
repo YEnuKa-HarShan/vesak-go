@@ -5,7 +5,6 @@ import '../models/event_model.dart';
 class MemoryService {
   final SupabaseClient _supabase = Supabase.instance.client;
 
-  // Check if memory exists for an event
   Future<bool> hasMemory(String eventId, String userId) async {
     try {
       final response = await _supabase
@@ -16,12 +15,10 @@ class MemoryService {
           .maybeSingle();
       return response != null;
     } catch (e) {
-      print('Check memory error: $e');
       return false;
     }
   }
 
-  // Get memory by event
   Future<MemoryModel?> getMemoryByEvent(String eventId, String userId) async {
     try {
       final response = await _supabase
@@ -36,12 +33,10 @@ class MemoryService {
       }
       return null;
     } catch (e) {
-      print('Get memory by event error: $e');
       return null;
     }
   }
 
-  // Create memory
   Future<bool> createMemory({
     required String eventId,
     required String userId,
@@ -66,6 +61,24 @@ class MemoryService {
       };
 
       await _supabase.from('event_memories').insert(newMemory);
+
+      // Also add to event_visits if not exists
+      final existingVisit = await _supabase
+          .from('event_visits')
+          .select()
+          .eq('user_id', userId)
+          .eq('event_id', eventId)
+          .maybeSingle();
+
+      if (existingVisit == null) {
+        await _supabase.from('event_visits').insert({
+          'user_id': userId,
+          'event_id': eventId,
+          'visited_at': DateTime.now().toIso8601String(),
+          'has_memory': true,
+        });
+      }
+
       return true;
     } catch (e) {
       print('Create memory error: $e');
@@ -73,7 +86,6 @@ class MemoryService {
     }
   }
 
-  // Update memory
   Future<bool> updateMemory({
     required String memoryId,
     required String experienceNote,
@@ -103,7 +115,6 @@ class MemoryService {
     }
   }
 
-  // Delete memory
   Future<bool> deleteMemory(String memoryId) async {
     try {
       await _supabase.from('event_memories').delete().eq('id', memoryId);
@@ -114,7 +125,6 @@ class MemoryService {
     }
   }
 
-  // Get all user memories (grouped by year)
   Future<Map<String, List<MemoryWithEvent>>> getUserMemories(
       String userId) async {
     try {
@@ -143,7 +153,6 @@ class MemoryService {
   }
 }
 
-// Helper class for memory with event data
 class MemoryWithEvent {
   final MemoryModel memory;
   final EventModel event;

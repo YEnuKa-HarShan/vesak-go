@@ -396,43 +396,80 @@ class SupabaseService {
   }
 
   // ============================================
-  // MEMORY METHODS
+  // EVENT STATS METHODS
   // ============================================
 
-  Future<int> getMemoryCount(String userId) async {
+  Future<Map<String, int>> getEventStats(String eventId) async {
+    try {
+      final response = await _supabase
+          .from('events')
+          .select('total_visits, total_memories, total_bookmarks')
+          .eq('id', eventId)
+          .maybeSingle();
+
+      if (response != null) {
+        return {
+          'total_visits': response['total_visits'] ?? 0,
+          'total_memories': response['total_memories'] ?? 0,
+          'total_bookmarks': response['total_bookmarks'] ?? 0,
+        };
+      }
+      return {'total_visits': 0, 'total_memories': 0, 'total_bookmarks': 0};
+    } catch (e) {
+      print('Get event stats error: $e');
+      return {'total_visits': 0, 'total_memories': 0, 'total_bookmarks': 0};
+    }
+  }
+
+  Future<bool> hasUserVisitedEvent(String eventId, String userId) async {
+    try {
+      final result = await _supabase
+          .from('event_visits')
+          .select()
+          .eq('user_id', userId)
+          .eq('event_id', eventId)
+          .maybeSingle();
+      return result != null;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<bool> markEventAsVisited(String eventId, String userId) async {
+    try {
+      final existing = await _supabase
+          .from('event_visits')
+          .select()
+          .eq('user_id', userId)
+          .eq('event_id', eventId)
+          .maybeSingle();
+
+      if (existing != null) return true;
+
+      await _supabase.from('event_visits').insert({
+        'user_id': userId,
+        'event_id': eventId,
+        'visited_at': DateTime.now().toIso8601String(),
+        'has_memory': false,
+      });
+
+      return true;
+    } catch (e) {
+      print('Mark as visited error: $e');
+      return false;
+    }
+  }
+
+  Future<int> getUserMemoryCount(String eventId, String userId) async {
     try {
       final response = await _supabase
           .from('event_memories')
           .select('id')
+          .eq('event_id', eventId)
           .eq('user_id', userId);
       return response.length;
     } catch (e) {
-      print('Get memory count error: $e');
       return 0;
-    }
-  }
-
-  // ============================================
-  // DISTRICT & PROVINCE FILTERING
-  // ============================================
-
-  Future<List<String>> getDistinctDistricts() async {
-    try {
-      final response = await _supabase
-          .from('events')
-          .select('district')
-          .not('district', 'is', null);
-
-      final districts = response
-          .map((e) => e['district'] as String)
-          .where((d) => d.isNotEmpty)
-          .toSet()
-          .toList();
-      districts.sort();
-      return districts;
-    } catch (e) {
-      print('Get distinct districts error: $e');
-      return [];
     }
   }
 
@@ -456,6 +493,7 @@ class SupabaseService {
         'event_id': eventId,
         'created_at': DateTime.now().toIso8601String(),
       });
+
       return true;
     } catch (e) {
       print('Add bookmark error: $e');
