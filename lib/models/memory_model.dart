@@ -70,4 +70,5 @@ class MemoryModel {
   bool get hasImages => imageUrls.isNotEmpty;
   bool get hasVideo => videoUrl.isNotEmpty;
   int get mediaCount => (hasImages ? imageUrls.length : 0) + (hasVideo ? 1 : 0);
+  String get coverImage => hasImages ? imageUrls.first : '';
 }

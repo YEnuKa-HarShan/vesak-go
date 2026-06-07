@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -12,10 +13,6 @@ import '../services/cloudinary_service.dart';
 import '../constants.dart';
 import '../theme/app_theme.dart';
 import 'create_memory_screen.dart';
-
-// ─────────────────────────────────────────────────────────────
-//  Glass helper
-// ─────────────────────────────────────────────────────────────
 
 class _Glass extends StatelessWidget {
   final Widget child;
@@ -58,19 +55,11 @@ class _Glass extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Screen
-// ─────────────────────────────────────────────────────────────
-
 class MemoryDetailsScreen extends StatefulWidget {
   final MemoryModel memory;
   final EventModel event;
-
-  const MemoryDetailsScreen({
-    super.key,
-    required this.memory,
-    required this.event,
-  });
+  const MemoryDetailsScreen(
+      {super.key, required this.memory, required this.event});
 
   @override
   State<MemoryDetailsScreen> createState() => _MemoryDetailsScreenState();
@@ -85,21 +74,92 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
   late AnimationController _fadeController;
   bool _isLoading = false;
   int _currentImageIndex = 0;
+  bool _isAutoPlaying = true;
+  bool _isInitialDelay = true;
+  Timer? _autoPlayTimer;
+  Timer? _initialDelayTimer;
+  final ScrollController _scrollController = ScrollController();
+  bool _isHeaderSticky = false;
 
   @override
   void initState() {
     super.initState();
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.dark);
     _fadeController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 400),
-    )..forward();
+        vsync: this, duration: const Duration(milliseconds: 400))
+      ..forward();
+    _scrollController.addListener(_onScroll);
+
+    // Start auto-play with initial delay
+    _startAutoPlayWithDelay();
   }
 
   @override
   void dispose() {
+    _stopAutoPlay();
+    _initialDelayTimer?.cancel();
+    _scrollController.dispose();
     _fadeController.dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    final shouldBeSticky = _scrollController.offset > 200;
+    if (shouldBeSticky != _isHeaderSticky) {
+      setState(() => _isHeaderSticky = shouldBeSticky);
+    }
+  }
+
+  void _startAutoPlayWithDelay() {
+    if (widget.memory.imageUrls.length <= 1) return;
+
+    // Show that auto-play will start soon
+    _initialDelayTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) {
+        setState(() => _isInitialDelay = false);
+        _startAutoPlay();
+      }
+    });
+  }
+
+  void _startAutoPlay() {
+    if (widget.memory.imageUrls.length <= 1) return;
+    _stopAutoPlay();
+
+    _autoPlayTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (_isAutoPlaying && mounted) {
+        setState(() {
+          _currentImageIndex =
+              (_currentImageIndex + 1) % widget.memory.imageUrls.length;
+        });
+      }
+    });
+  }
+
+  void _stopAutoPlay() {
+    _autoPlayTimer?.cancel();
+    _autoPlayTimer = null;
+  }
+
+  void _pauseAutoPlay() {
+    setState(() => _isAutoPlaying = false);
+    _stopAutoPlay();
+  }
+
+  void _resumeAutoPlay() {
+    if (!_isAutoPlaying) {
+      setState(() => _isAutoPlaying = true);
+      _startAutoPlay();
+    }
+  }
+
+  void _toggleAutoPlay() {
+    if (_isAutoPlaying) {
+      _pauseAutoPlay();
+    } else {
+      _resumeAutoPlay();
+    }
+    setState(() {});
   }
 
   Future<void> _deleteMemory() async {
@@ -114,42 +174,33 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
             'Are you sure you want to delete this memory? This action cannot be undone.'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
           TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: AppTheme.error),
-            child: const Text('Delete'),
-          ),
+              onPressed: () => Navigator.pop(context, true),
+              style: TextButton.styleFrom(foregroundColor: AppTheme.error),
+              child: const Text('Delete')),
         ],
       ),
     );
-
     if (confirm == true && mounted) {
       setState(() => _isLoading = true);
-
-      // Delete images from Cloudinary
       for (final publicId in widget.memory.imagePublicIds) {
         await _cloudinaryService.deleteFile(publicId);
       }
       if (widget.memory.videoPublicId.isNotEmpty) {
         await _cloudinaryService.deleteFile(widget.memory.videoPublicId);
       }
-
       final success = await _memoryService.deleteMemory(widget.memory.id);
-
       if (mounted) {
         setState(() => _isLoading = false);
         if (success) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Memory deleted successfully')),
-          );
+              const SnackBar(content: Text('Memory deleted successfully')));
           Navigator.pop(context, true);
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Failed to delete memory')),
-          );
+              const SnackBar(content: Text('Failed to delete memory')));
         }
       }
     }
@@ -171,24 +222,19 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
         ),
       ),
     );
-    if (result == true && mounted) {
-      Navigator.pop(context, true);
-    }
+    if (result == true && mounted) Navigator.pop(context, true);
   }
 
   void _shareMemory() {
     final dateFormat = DateFormat('MMMM d, yyyy');
     Share.share(
-      '📝 My memory at ${widget.event.title}\n\n'
-      '📅 Date visited: ${dateFormat.format(widget.memory.visitedAt)}\n'
-      '📍 Location: ${widget.event.location}\n\n'
-      '✨ Experience:\n${widget.memory.experienceNote}\n\n'
-      'Shared from VesakGO 🌼',
+      '📝 My memory at ${widget.event.title}\n\n📅 Date visited: ${dateFormat.format(widget.memory.visitedAt)}\n📍 Location: ${widget.event.location}\n\n✨ Experience:\n${widget.memory.experienceNote}\n\nShared from VesakGO 🌼',
       subject: 'My Vesak Memory - ${widget.event.title}',
     );
   }
 
   void _showFullScreenImage(int index) {
+    _pauseAutoPlay();
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -207,27 +253,27 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
                 width: double.infinity,
                 height: double.infinity,
                 placeholder: (_, __) => const Center(
-                  child: CircularProgressIndicator(color: Colors.white),
-                ),
+                    child: CircularProgressIndicator(color: Colors.white)),
                 errorWidget: (_, __, ___) => const Center(
-                  child:
-                      Icon(Icons.broken_image, size: 50, color: Colors.white),
-                ),
+                    child: Icon(Icons.broken_image,
+                        size: 50, color: Colors.white)),
               ),
             ),
             Positioned(
               top: 40,
               right: 20,
               child: GestureDetector(
-                onTap: () => Navigator.pop(context),
+                onTap: () {
+                  _resumeAutoPlay();
+                  Navigator.pop(context);
+                },
                 child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.5),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.close, color: Colors.white, size: 24),
-                ),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.5),
+                        shape: BoxShape.circle),
+                    child:
+                        const Icon(Icons.close, color: Colors.white, size: 24)),
               ),
             ),
             if (widget.memory.imageUrls.length > 1)
@@ -240,25 +286,24 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
                     padding:
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.5),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
+                        color: Colors.black.withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(20)),
                     child: Text(
-                      '${index + 1} / ${widget.memory.imageUrls.length}',
-                      style: const TextStyle(color: Colors.white, fontSize: 14),
-                    ),
+                        '${index + 1} / ${widget.memory.imageUrls.length}',
+                        style:
+                            const TextStyle(color: Colors.white, fontSize: 14)),
                   ),
                 ),
               ),
           ],
         ),
       ),
-    );
+    ).then((_) => _resumeAutoPlay());
   }
 
   void _showVideo() {
     if (widget.memory.videoUrl.isEmpty) return;
-
+    _pauseAutoPlay();
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -274,34 +319,30 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
                     width: MediaQuery.of(context).size.width,
                     height: MediaQuery.of(context).size.height * 0.5,
                     decoration: BoxDecoration(
-                      color: Colors.black,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                        color: Colors.black,
+                        borderRadius: BorderRadius.circular(12)),
                     child: CachedNetworkImage(
                       imageUrl: widget.memory.videoUrl,
                       fit: BoxFit.contain,
                       placeholder: (_, __) => const Center(
-                        child: CircularProgressIndicator(color: Colors.white),
-                      ),
+                          child:
+                              CircularProgressIndicator(color: Colors.white)),
                       errorWidget: (_, __, ___) => const Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
+                          child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
                             Icon(Icons.play_circle_filled,
                                 size: 50, color: Colors.white),
                             SizedBox(height: 8),
                             Text('Tap to play video',
-                                style: TextStyle(color: Colors.white)),
-                          ],
-                        ),
-                      ),
+                                style: TextStyle(color: Colors.white))
+                          ])),
                     ),
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Video from ${DateFormat('MMM d, yyyy').format(widget.memory.visitedAt)}',
-                    style: const TextStyle(color: Colors.white),
-                  ),
+                      'Video from ${DateFormat('MMM d, yyyy').format(widget.memory.visitedAt)}',
+                      style: const TextStyle(color: Colors.white)),
                 ],
               ),
             ),
@@ -309,31 +350,28 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
               top: 40,
               right: 20,
               child: GestureDetector(
-                onTap: () => Navigator.pop(context),
+                onTap: () {
+                  _resumeAutoPlay();
+                  Navigator.pop(context);
+                },
                 child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.5),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.close, color: Colors.white, size: 24),
-                ),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.5),
+                        shape: BoxShape.circle),
+                    child:
+                        const Icon(Icons.close, color: Colors.white, size: 24)),
               ),
             ),
           ],
         ),
       ),
-    );
+    ).then((_) => _resumeAutoPlay());
   }
 
-  String _formatDate(DateTime date) {
-    return DateFormat('EEEE, MMMM d, yyyy').format(date);
-  }
-
-  String _formatTime(DateTime date) {
-    return DateFormat('h:mm a').format(date);
-  }
-
+  String _formatDate(DateTime date) =>
+      DateFormat('EEEE, MMMM d, yyyy').format(date);
+  String _formatTime(DateTime date) => DateFormat('h:mm a').format(date);
   bool get _canEdit =>
       _sessionService.isLoggedIn &&
       widget.memory.userId == _sessionService.currentUser?.id;
@@ -341,31 +379,31 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
   @override
   Widget build(BuildContext context) {
     final categoryColor = AppConstants.getCategoryColor(widget.event.category);
-    final icon = widget.event.getMarkerIcon();
-    final dateFormat = DateFormat('MMMM d, yyyy');
+    final hasMultipleImages = widget.memory.imageUrls.length > 1;
 
     return Scaffold(
       backgroundColor: AppTheme.background,
       body: Stack(
         children: [
-          // ── Ambient blobs ──
           _buildAmbientBlobs(categoryColor),
-
-          // ── Main content ──
           CustomScrollView(
+            controller: _scrollController,
             physics: const BouncingScrollPhysics(),
             slivers: [
-              // ── Media Gallery Sliver ──
+              SliverPersistentHeader(
+                pinned: true,
+                delegate: _StickyHeaderDelegate(
+                  isVisible: _isHeaderSticky,
+                  title: widget.event.title,
+                  location: widget.event.location,
+                  onEdit: _canEdit ? _editMemory : null,
+                  onShare: _shareMemory,
+                  onDelete: _canEdit ? _deleteMemory : null,
+                ),
+              ),
               if (widget.memory.hasImages)
                 SliverToBoxAdapter(
-                  child: _buildMediaGallery(),
-                )
-              else
-                SliverToBoxAdapter(
-                  child: _buildHeroSection(categoryColor, icon),
-                ),
-
-              // ── Content Sliver ──
+                    child: _buildMediaGallery(hasMultipleImages)),
               SliverToBoxAdapter(
                 child: FadeTransition(
                   opacity: _fadeController,
@@ -393,89 +431,39 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
               ),
             ],
           ),
-
-          // ── Floating app bar ──
           SafeArea(child: _buildFloatingAppBar()),
         ],
       ),
     );
   }
 
-  Widget _buildAmbientBlobs(Color categoryColor) {
-    return Stack(
-      children: [
-        Positioned(
-          top: -60,
-          left: -60,
-          child: Container(
-            width: 280,
-            height: 280,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: AppTheme.memoryPrimary.withOpacity(0.12),
-            ),
-          ),
-        ),
-        Positioned(
-          top: 100,
-          right: -80,
-          child: Container(
-            width: 240,
-            height: 240,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: categoryColor.withOpacity(0.10),
-            ),
-          ),
-        ),
-        Positioned(
-          bottom: -80,
-          left: 60,
-          child: Container(
-            width: 200,
-            height: 200,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: AppTheme.blobEmerald.withOpacity(0.08),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMediaGallery() {
+  Widget _buildMediaGallery(bool hasMultipleImages) {
     return SizedBox(
-      height: 350,
+      height: 400,
       child: Stack(
         children: [
-          // Main image
-          if (widget.memory.imageUrls.isNotEmpty)
-            GestureDetector(
-              onTap: () => _showFullScreenImage(_currentImageIndex),
-              child: CachedNetworkImage(
-                imageUrl: widget.memory.imageUrls[_currentImageIndex],
-                width: double.infinity,
-                height: 350,
-                fit: BoxFit.cover,
-                placeholder: (_, __) => Container(
-                  height: 350,
+          // Main Image
+          GestureDetector(
+            onTap: () => _showFullScreenImage(_currentImageIndex),
+            child: CachedNetworkImage(
+              imageUrl: widget.memory.imageUrls[_currentImageIndex],
+              width: double.infinity,
+              height: 400,
+              fit: BoxFit.cover,
+              placeholder: (_, __) => Container(
+                  height: 400,
                   color: Colors.grey[200],
                   child: const Center(
-                    child: CircularProgressIndicator(color: AppTheme.primary),
-                  ),
-                ),
-                errorWidget: (_, __, ___) => Container(
-                  height: 350,
+                      child: CircularProgressIndicator(
+                          color: AppTheme.memoryPrimary))),
+              errorWidget: (_, __, ___) => Container(
+                  height: 400,
                   color: Colors.grey[200],
                   child: const Center(
-                    child:
-                        Icon(Icons.broken_image, size: 50, color: Colors.grey),
-                  ),
-                ),
-              ),
+                      child: Icon(Icons.broken_image,
+                          size: 50, color: Colors.grey))),
             ),
-
+          ),
           // Gradient overlay
           Positioned.fill(
             child: Container(
@@ -486,94 +474,167 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
                   colors: [
                     Colors.transparent,
                     Colors.black.withOpacity(0.3),
-                    Colors.black.withOpacity(0.6),
+                    Colors.black.withOpacity(0.6)
                   ],
                   stops: const [0.6, 0.8, 1.0],
                 ),
               ),
             ),
           ),
-
-          // Image counter and video badge
+          // Auto-play starting soon indicator
+          if (_isInitialDelay && hasMultipleImages)
+            Positioned(
+              top: 20,
+              right: 20,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.6),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Row(
+                  children: [
+                    SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                    ),
+                    SizedBox(width: 8),
+                    Text('Auto-play starting...',
+                        style: TextStyle(color: Colors.white, fontSize: 11)),
+                  ],
+                ),
+              ),
+            ),
+          // Bottom controls row
           Positioned(
             bottom: 20,
             left: 16,
+            right: 16,
             child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                if (widget.memory.imageUrls.length > 1)
-                  _Glass(
-                    borderRadius: BorderRadius.circular(20),
-                    blur: 16,
-                    opacity: 0.75,
-                    tint: Colors.black,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.photo_library_rounded,
-                            size: 14, color: Colors.white),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${_currentImageIndex + 1} / ${widget.memory.imageUrls.length}',
-                          style: const TextStyle(
-                              color: Colors.white, fontSize: 12),
+                // Left group: Play/Pause + Image counter
+                Row(
+                  children: [
+                    if (hasMultipleImages)
+                      GestureDetector(
+                        onTap: _toggleAutoPlay,
+                        child: Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.5),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            _isAutoPlaying ? Icons.pause : Icons.play_arrow,
+                            color: Colors.white,
+                            size: 20,
+                          ),
                         ),
-                      ],
-                    ),
-                  ),
-                if (widget.memory.hasVideo) ...[
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: _showVideo,
-                    child: _Glass(
-                      borderRadius: BorderRadius.circular(20),
-                      blur: 16,
-                      opacity: 0.75,
-                      tint: AppTheme.accent,
+                      ),
+                    if (hasMultipleImages) const SizedBox(width: 12),
+                    Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
                       child: Row(
-                        children: const [
+                        children: [
+                          const Icon(Icons.photo_library_rounded,
+                              size: 14, color: Colors.white),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${_currentImageIndex + 1} / ${widget.memory.imageUrls.length}',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                // Right group: Video button
+                if (widget.memory.hasVideo)
+                  GestureDetector(
+                    onTap: _showVideo,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: AppTheme.accent.withOpacity(0.9),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Row(
+                        children: [
                           Icon(Icons.play_circle_filled,
                               size: 14, color: Colors.white),
                           SizedBox(width: 4),
                           Text('Play Video',
-                              style:
-                                  TextStyle(color: Colors.white, fontSize: 12)),
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500)),
                         ],
                       ),
                     ),
                   ),
-                ],
               ],
             ),
           ),
-
-          // Thumbnail strip
-          if (widget.memory.imageUrls.length > 1)
+          // Progress bar
+          if (hasMultipleImages && _isAutoPlaying && !_isInitialDelay)
             Positioned(
-              bottom: 20,
-              right: 16,
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: _AutoPlayProgressBar(
+                duration: const Duration(seconds: 5),
+                onComplete: () {
+                  if (_isAutoPlaying && mounted) {
+                    setState(() {
+                      _currentImageIndex = (_currentImageIndex + 1) %
+                          widget.memory.imageUrls.length;
+                    });
+                  }
+                },
+                key: ValueKey(_currentImageIndex),
+              ),
+            ),
+          // Thumbnail strip
+          if (hasMultipleImages)
+            Positioned(
+              bottom: 80,
+              left: 100,
+              right: 100,
               child: SizedBox(
-                height: 50,
+                height: 40,
                 child: ListView.builder(
                   scrollDirection: Axis.horizontal,
-                  shrinkWrap: true,
                   itemCount: widget.memory.imageUrls.length,
                   itemBuilder: (context, index) {
                     final isActive = index == _currentImageIndex;
                     return GestureDetector(
-                      onTap: () => setState(() => _currentImageIndex = index),
+                      onTap: () {
+                        _pauseAutoPlay();
+                        setState(() => _currentImageIndex = index);
+                      },
                       child: Container(
-                        width: 50,
-                        height: 50,
-                        margin: const EdgeInsets.only(left: 8),
+                        width: 40,
+                        height: 40,
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: isActive ? Colors.white : Colors.transparent,
-                            width: 2,
-                          ),
+                              color:
+                                  isActive ? Colors.white : Colors.transparent,
+                              width: 2),
                         ),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(6),
@@ -595,39 +656,37 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
     );
   }
 
-  Widget _buildHeroSection(Color categoryColor, String icon) {
-    return Container(
-      height: 200,
-      width: double.infinity,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppTheme.memoryPrimary.withOpacity(0.85),
-            AppTheme.memoryPrimary.withOpacity(0.50),
-            categoryColor.withOpacity(0.30),
-          ],
-        ),
-      ),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(icon, style: const TextStyle(fontSize: 48)),
-            const SizedBox(height: 8),
-            Text(
-              widget.event.title,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
+  Widget _buildAmbientBlobs(Color categoryColor) {
+    return Stack(
+      children: [
+        Positioned(
+            top: -60,
+            left: -60,
+            child: Container(
+                width: 280,
+                height: 280,
+                decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppTheme.memoryPrimary.withOpacity(0.12)))),
+        Positioned(
+            top: 100,
+            right: -80,
+            child: Container(
+                width: 240,
+                height: 240,
+                decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: categoryColor.withOpacity(0.10)))),
+        Positioned(
+            bottom: -80,
+            left: 60,
+            child: Container(
+                width: 200,
+                height: 200,
+                decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppTheme.blobEmerald.withOpacity(0.08)))),
+      ],
     );
   }
 
@@ -636,7 +695,6 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
-          // Back button
           _Glass(
             borderRadius: BorderRadius.circular(14),
             blur: 16,
@@ -644,18 +702,16 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
             tint: Colors.white,
             border: Border.all(color: Colors.white.withOpacity(0.35), width: 1),
             child: SizedBox(
-              width: 44,
-              height: 44,
-              child: IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
-                color: AppTheme.primary,
-                onPressed: () => Navigator.pop(context),
-                padding: EdgeInsets.zero,
-              ),
-            ),
+                width: 44,
+                height: 44,
+                child: IconButton(
+                    icon:
+                        const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+                    color: AppTheme.primary,
+                    onPressed: () => Navigator.pop(context),
+                    padding: EdgeInsets.zero)),
           ),
           const Spacer(),
-          // Share button
           _Glass(
             borderRadius: BorderRadius.circular(14),
             blur: 16,
@@ -663,18 +719,16 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
             tint: Colors.white,
             border: Border.all(color: Colors.white.withOpacity(0.35), width: 1),
             child: SizedBox(
-              width: 44,
-              height: 44,
-              child: IconButton(
-                icon: const Icon(Icons.ios_share_rounded, size: 18),
-                color: AppTheme.primary,
-                onPressed: _shareMemory,
-                padding: EdgeInsets.zero,
-              ),
-            ),
+                width: 44,
+                height: 44,
+                child: IconButton(
+                    icon: const Icon(Icons.ios_share_rounded, size: 18),
+                    color: AppTheme.primary,
+                    onPressed: _shareMemory,
+                    padding: EdgeInsets.zero)),
           ),
-          if (_canEdit) ...[
-            const SizedBox(width: 8),
+          if (_canEdit) const SizedBox(width: 8),
+          if (_canEdit)
             _Glass(
               borderRadius: BorderRadius.circular(14),
               blur: 16,
@@ -683,17 +737,14 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
               border:
                   Border.all(color: Colors.white.withOpacity(0.35), width: 1),
               child: SizedBox(
-                width: 44,
-                height: 44,
-                child: IconButton(
-                  icon: const Icon(Icons.more_vert_rounded, size: 18),
-                  color: AppTheme.primary,
-                  onPressed: () => _showOptionsMenu(),
-                  padding: EdgeInsets.zero,
-                ),
-              ),
+                  width: 44,
+                  height: 44,
+                  child: IconButton(
+                      icon: const Icon(Icons.more_vert_rounded, size: 18),
+                      color: AppTheme.primary,
+                      onPressed: () => _showOptionsMenu(),
+                      padding: EdgeInsets.zero)),
             ),
-          ],
         ],
       ),
     );
@@ -709,34 +760,28 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
           filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
           child: Container(
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.85),
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(28)),
-            ),
+                color: Colors.white.withOpacity(0.85),
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(28))),
             child: SafeArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(height: 12),
-                  Container(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const SizedBox(height: 12),
+                Container(
                     width: 40,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: Colors.grey.withOpacity(0.3),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  ListTile(
+                        color: Colors.grey.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(2))),
+                const SizedBox(height: 16),
+                ListTile(
                     leading:
                         const Icon(Icons.edit_rounded, color: AppTheme.primary),
                     title: const Text('Edit Memory'),
                     onTap: () {
                       Navigator.pop(context);
                       _editMemory();
-                    },
-                  ),
-                  ListTile(
+                    }),
+                ListTile(
                     leading: const Icon(Icons.delete_outline_rounded,
                         color: AppTheme.error),
                     title: const Text('Delete Memory',
@@ -744,11 +789,9 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
                     onTap: () {
                       Navigator.pop(context);
                       _deleteMemory();
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                ],
-              ),
+                    }),
+                const SizedBox(height: 8),
+              ]),
             ),
           ),
         ),
@@ -760,58 +803,43 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Container(
+        Row(children: [
+          Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: AppTheme.memoryPrimary.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(10),
-              ),
+                  color: AppTheme.memoryPrimary.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(10)),
               child: const Icon(Icons.memory_rounded,
-                  size: 18, color: AppTheme.memoryPrimary),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                widget.event.title,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.textPrimary,
-                ),
-              ),
-            ),
-          ],
-        ),
+                  size: 18, color: AppTheme.memoryPrimary)),
+          const SizedBox(width: 10),
+          Expanded(
+              child: Text(widget.event.title,
+                  style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textPrimary))),
+        ]),
         const SizedBox(height: 8),
-        Row(
-          children: [
-            Icon(Icons.calendar_today_rounded,
-                size: 12, color: AppTheme.textSecondary),
-            const SizedBox(width: 4),
-            Text(
-              'Visited on ${_formatDate(widget.memory.visitedAt)}',
-              style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-            ),
-            const SizedBox(width: 12),
-            Container(
+        Row(children: [
+          Icon(Icons.calendar_today_rounded,
+              size: 12, color: AppTheme.textSecondary),
+          const SizedBox(width: 4),
+          Text('Visited on ${_formatDate(widget.memory.visitedAt)}',
+              style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+          const SizedBox(width: 12),
+          Container(
               width: 4,
               height: 4,
               decoration: BoxDecoration(
                   color: AppTheme.textSecondary.withOpacity(0.5),
-                  shape: BoxShape.circle),
-            ),
-            const SizedBox(width: 12),
-            Icon(Icons.access_time_rounded,
-                size: 12, color: AppTheme.textSecondary),
-            const SizedBox(width: 4),
-            Text(
-              _formatTime(widget.memory.visitedAt),
-              style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-            ),
-          ],
-        ),
+                  shape: BoxShape.circle)),
+          const SizedBox(width: 12),
+          Icon(Icons.access_time_rounded,
+              size: 12, color: AppTheme.textSecondary),
+          const SizedBox(width: 4),
+          Text(_formatTime(widget.memory.visitedAt),
+              style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+        ]),
       ],
     );
   }
@@ -820,40 +848,32 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
     return _buildGlassCard(
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
                     color: AppTheme.primary.withOpacity(0.10),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(Icons.event_rounded,
-                      size: 14, color: AppTheme.primary),
-                ),
-                const SizedBox(width: 8),
-                const Text('Event Details',
-                    style:
-                        TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _buildDetailRow(Icons.location_on_rounded, widget.event.location),
-            const SizedBox(height: 8),
-            _buildDetailRow(Icons.category_rounded, widget.event.category),
-            if (widget.event.foodType != 'none') ...[
-              const SizedBox(height: 8),
-              _buildDetailRow(
-                  Icons.restaurant_rounded, 'Food: ${widget.event.foodType}'),
-            ],
+                    borderRadius: BorderRadius.circular(8)),
+                child: const Icon(Icons.event_rounded,
+                    size: 14, color: AppTheme.primary)),
+            const SizedBox(width: 8),
+            const Text('Event Details',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600))
+          ]),
+          const SizedBox(height: 12),
+          _buildDetailRow(Icons.location_on_rounded, widget.event.location),
+          const SizedBox(height: 8),
+          _buildDetailRow(Icons.category_rounded, widget.event.category),
+          if (widget.event.foodType != 'none') ...[
             const SizedBox(height: 8),
             _buildDetailRow(
-                Icons.person_rounded, 'Created by: ${widget.event.createdBy}'),
+                Icons.restaurant_rounded, 'Food: ${widget.event.foodType}'),
           ],
-        ),
+          const SizedBox(height: 8),
+          _buildDetailRow(
+              Icons.person_rounded, 'Created by: ${widget.event.createdBy}'),
+        ]),
       ),
     );
   }
@@ -862,37 +882,24 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
     return _buildGlassCard(
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
                     color: AppTheme.memoryPrimary.withOpacity(0.10),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(Icons.edit_note_rounded,
-                      size: 14, color: AppTheme.memoryPrimary),
-                ),
-                const SizedBox(width: 8),
-                const Text('My Experience',
-                    style:
-                        TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              widget.memory.experienceNote,
+                    borderRadius: BorderRadius.circular(8)),
+                child: const Icon(Icons.edit_note_rounded,
+                    size: 14, color: AppTheme.memoryPrimary)),
+            const SizedBox(width: 8),
+            const Text('My Experience',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600))
+          ]),
+          const SizedBox(height: 12),
+          Text(widget.memory.experienceNote,
               style: const TextStyle(
-                fontSize: 14,
-                color: AppTheme.textSecondary,
-                height: 1.6,
-              ),
-            ),
-          ],
-        ),
+                  fontSize: 14, color: AppTheme.textSecondary, height: 1.6)),
+        ]),
       ),
     );
   }
@@ -901,90 +908,59 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
     return _buildGlassCard(
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.photo_library_rounded,
-                          size: 16, color: AppTheme.primary),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${widget.memory.imageUrls.length}',
-                        style: const TextStyle(
-                            fontSize: 13, fontWeight: FontWeight.w600),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text('Photos',
-                      style: TextStyle(
-                          fontSize: 11, color: AppTheme.textSecondary)),
-                ],
-              ),
-            ),
-            Container(
-                width: 1, height: 30, color: Colors.grey.withOpacity(0.2)),
-            Expanded(
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.videocam_rounded,
-                          size: 16,
-                          color: widget.memory.hasVideo
-                              ? AppTheme.accent
-                              : AppTheme.textSecondary),
-                      const SizedBox(width: 4),
-                      Text(
-                        widget.memory.hasVideo ? '1' : '0',
-                        style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: widget.memory.hasVideo
-                                ? AppTheme.accent
-                                : AppTheme.textSecondary),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text('Video',
-                      style: TextStyle(
-                          fontSize: 11, color: AppTheme.textSecondary)),
-                ],
-              ),
-            ),
-            Container(
-                width: 1, height: 30, color: Colors.grey.withOpacity(0.2)),
-            Expanded(
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.calendar_today_rounded,
-                          size: 16, color: AppTheme.textSecondary),
-                      const SizedBox(width: 4),
-                      Text(
-                        DateFormat('yyyy').format(widget.memory.visitedAt),
-                        style: const TextStyle(
-                            fontSize: 13, fontWeight: FontWeight.w600),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text('Year',
-                      style: TextStyle(
-                          fontSize: 11, color: AppTheme.textSecondary)),
-                ],
-              ),
-            ),
-          ],
-        ),
+        child: Row(children: [
+          Expanded(
+              child: Column(children: [
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Icon(Icons.photo_library_rounded,
+                  size: 16, color: AppTheme.primary),
+              const SizedBox(width: 4),
+              Text('${widget.memory.imageUrls.length}',
+                  style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600))
+            ]),
+            const SizedBox(height: 4),
+            Text('Photos',
+                style: TextStyle(fontSize: 11, color: AppTheme.textSecondary))
+          ])),
+          Container(width: 1, height: 30, color: Colors.grey.withOpacity(0.2)),
+          Expanded(
+              child: Column(children: [
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Icon(Icons.videocam_rounded,
+                  size: 16,
+                  color: widget.memory.hasVideo
+                      ? AppTheme.accent
+                      : AppTheme.textSecondary),
+              const SizedBox(width: 4),
+              Text(widget.memory.hasVideo ? '1' : '0',
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: widget.memory.hasVideo
+                          ? AppTheme.accent
+                          : AppTheme.textSecondary))
+            ]),
+            const SizedBox(height: 4),
+            Text('Video',
+                style: TextStyle(fontSize: 11, color: AppTheme.textSecondary))
+          ])),
+          Container(width: 1, height: 30, color: Colors.grey.withOpacity(0.2)),
+          Expanded(
+              child: Column(children: [
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Icon(Icons.calendar_today_rounded,
+                  size: 16, color: AppTheme.textSecondary),
+              const SizedBox(width: 4),
+              Text(DateFormat('yyyy').format(widget.memory.visitedAt),
+                  style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600))
+            ]),
+            const SizedBox(height: 4),
+            Text('Year',
+                style: TextStyle(fontSize: 11, color: AppTheme.textSecondary))
+          ])),
+        ]),
       ),
     );
   }
@@ -1005,11 +981,11 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
               child: InkWell(
                 borderRadius: BorderRadius.circular(16),
                 onTap: _editMemory,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 14),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
-                    children: const [
+                    children: [
                       Icon(Icons.edit_rounded,
                           size: 16, color: AppTheme.primary),
                       SizedBox(width: 8),
@@ -1039,11 +1015,11 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
               child: InkWell(
                 borderRadius: BorderRadius.circular(16),
                 onTap: _deleteMemory,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 14),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
-                    children: const [
+                    children: [
                       Icon(Icons.delete_outline_rounded,
                           size: 16, color: AppTheme.error),
                       SizedBox(width: 8),
@@ -1077,20 +1053,15 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
           borderRadius: BorderRadius.circular(16),
           onTap: () => Navigator.pop(context),
           child: const SizedBox(
-            width: double.infinity,
-            child: Padding(
-              padding: EdgeInsets.symmetric(vertical: 15),
-              child: Center(
-                child: Text(
-                  'Close',
-                  style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white),
-                ),
-              ),
-            ),
-          ),
+              width: double.infinity,
+              child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 15),
+                  child: Center(
+                      child: Text('Close',
+                          style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white))))),
         ),
       ),
     );
@@ -1119,15 +1090,148 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
         Icon(icon, size: 14, color: AppTheme.textSecondary.withOpacity(0.7)),
         const SizedBox(width: 8),
         Expanded(
-          child: Text(
-            text,
-            style: TextStyle(
-                fontSize: 13, color: AppTheme.textSecondary.withOpacity(0.85)),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
+            child: Text(text,
+                style: TextStyle(
+                    fontSize: 13,
+                    color: AppTheme.textSecondary.withOpacity(0.85)),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis)),
       ],
     );
   }
+}
+
+class _AutoPlayProgressBar extends StatefulWidget {
+  final Duration duration;
+  final VoidCallback onComplete;
+  const _AutoPlayProgressBar(
+      {required this.duration, required this.onComplete, super.key});
+
+  @override
+  State<_AutoPlayProgressBar> createState() => _AutoPlayProgressBarState();
+}
+
+class _AutoPlayProgressBarState extends State<_AutoPlayProgressBar>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: widget.duration);
+    _controller.forward();
+    _controller.addListener(() {
+      if (_controller.isCompleted) {
+        widget.onComplete();
+        _controller.reset();
+        _controller.forward();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LinearProgressIndicator(
+      value: _controller.value,
+      backgroundColor: Colors.white.withOpacity(0.3),
+      color: Colors.white,
+      minHeight: 3,
+    );
+  }
+}
+
+class _StickyHeaderDelegate extends SliverPersistentHeaderDelegate {
+  final bool isVisible;
+  final String title;
+  final String location;
+  final VoidCallback? onEdit;
+  final VoidCallback? onShare;
+  final VoidCallback? onDelete;
+
+  _StickyHeaderDelegate({
+    required this.isVisible,
+    required this.title,
+    required this.location,
+    this.onEdit,
+    this.onShare,
+    this.onDelete,
+  });
+
+  @override
+  double get minExtent => isVisible ? 70 : 0;
+  @override
+  double get maxExtent => isVisible ? 70 : 0;
+
+  @override
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
+    if (!isVisible) return const SizedBox.shrink();
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          height: 70,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.92),
+            border: Border(
+                bottom:
+                    BorderSide(color: Colors.grey.withOpacity(0.2), width: 1)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(title,
+                          style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.textPrimary),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
+                      Text(location,
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: AppTheme.textSecondary.withOpacity(0.7)),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
+                    ],
+                  ),
+                ),
+                if (onShare != null)
+                  IconButton(
+                      icon: const Icon(Icons.share_rounded, size: 20),
+                      color: AppTheme.primary,
+                      onPressed: onShare),
+                if (onEdit != null)
+                  IconButton(
+                      icon: const Icon(Icons.edit_rounded, size: 20),
+                      color: AppTheme.primary,
+                      onPressed: onEdit),
+                if (onDelete != null)
+                  IconButton(
+                      icon: const Icon(Icons.delete_outline_rounded, size: 20),
+                      color: AppTheme.error,
+                      onPressed: onDelete),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) =>
+      true;
 }
