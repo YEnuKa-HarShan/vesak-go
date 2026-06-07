@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,10 +9,7 @@ import '../constants.dart';
 import '../services/supabase_service.dart';
 import '../models/event_model.dart';
 import '../theme/app_theme.dart';
-
-// ─────────────────────────────────────────────────────────────
-//  Glass helper  (identical to HomeScreen / ProfileScreen)
-// ─────────────────────────────────────────────────────────────
+import '../widgets/custom_bottom_sheet.dart';
 
 class _Glass extends StatelessWidget {
   final Widget child;
@@ -54,10 +52,6 @@ class _Glass extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-//  MapScreen
-// ─────────────────────────────────────────────────────────────
-
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
 
@@ -97,10 +91,6 @@ class _MapScreenState extends State<MapScreen>
     _fadeCtrl.dispose();
     super.dispose();
   }
-
-  // ─────────────────────────────────────────────
-  //  Data & filter logic  (unchanged)
-  // ─────────────────────────────────────────────
 
   Future<void> _loadEvents() async {
     final events = await _supabaseService.getEventsForMap();
@@ -217,6 +207,44 @@ class _MapScreenState extends State<MapScreen>
     }
   }
 
+  double _calculateDistance(
+      double lat1, double lon1, double lat2, double lon2) {
+    const double R = 6371;
+    final double dLat = (lat2 - lat1) * pi / 180;
+    final double dLon = (lon2 - lon1) * pi / 180;
+    final double a = sin(dLat / 2) * sin(dLat / 2) +
+        cos(lat1 * pi / 180) *
+            cos(lat2 * pi / 180) *
+            sin(dLon / 2) *
+            sin(dLon / 2);
+    final double c = 2 * atan2(sqrt(a), sqrt(1 - a));
+    return R * c;
+  }
+
+  void _showEventBottomSheet(EventModel event) {
+    double? distance;
+    if (_currentLocation != null) {
+      distance = _calculateDistance(
+        _currentLocation!.latitude,
+        _currentLocation!.longitude,
+        event.latitude,
+        event.longitude,
+      );
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => EventBottomSheet(
+        event: event,
+        distance: distance,
+        onBookmarkChanged: () => _loadEvents(),
+        onMemoryChanged: () => _loadEvents(),
+      ),
+    );
+  }
+
   void _centerOnUser() {
     if (_currentLocation != null) {
       _mapController.move(_currentLocation!, AppConstants.mapFocusZoom);
@@ -240,17 +268,13 @@ class _MapScreenState extends State<MapScreen>
     }
   }
 
-  // ─────────────────────────────────────────────
-  //  Marker builder  (unchanged)
-  // ─────────────────────────────────────────────
-
   Widget _buildEventMarker(EventModel event, double zoom) {
     final icon = event.getMarkerIcon();
     final color = AppConstants.getCategoryColor(event.category);
 
     if (zoom < 14) {
       return GestureDetector(
-        onTap: () => _showEventDetails(event),
+        onTap: () => _showEventBottomSheet(event),
         behavior: HitTestBehavior.opaque,
         child: SizedBox(
           width: 40,
@@ -277,7 +301,7 @@ class _MapScreenState extends State<MapScreen>
     }
 
     return GestureDetector(
-      onTap: () => _showEventDetails(event),
+      onTap: () => _showEventBottomSheet(event),
       behavior: HitTestBehavior.opaque,
       child: SizedBox(
         width: 44,
@@ -301,13 +325,8 @@ class _MapScreenState extends State<MapScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  BUILD ROOT
-  // ─────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
-    // Loading state — blobs + glass spinner
     if (_isLoading) {
       return Scaffold(
         backgroundColor: AppTheme.background,
@@ -335,27 +354,16 @@ class _MapScreenState extends State<MapScreen>
       backgroundColor: AppTheme.background,
       body: Stack(
         children: [
-          // ── Ambient blobs (behind everything) ──
           _buildAmbientBlobs(),
-
-          // ── Safe area content ──
           SafeArea(
             child: Column(
               children: [
-                // ── Glass header ──
                 _buildHeader(),
-
-                // ── Glass status filter bar ──
                 _buildStatusFilterBar(),
-
-                // ── Glass category filter bar ──
                 _buildCategoryFilterBar(),
-
-                // ── Map + overlays ──
                 Expanded(
                   child: Stack(
                     children: [
-                      // Map
                       FlutterMap(
                         mapController: _mapController,
                         options: MapOptions(
@@ -374,8 +382,6 @@ class _MapScreenState extends State<MapScreen>
                             urlTemplate: AppConstants.mapTileUrl,
                             userAgentPackageName: 'com.example.vesak_go',
                           ),
-
-                          // User location marker
                           if (_currentLocation != null)
                             MarkerLayer(
                               markers: [
@@ -405,8 +411,6 @@ class _MapScreenState extends State<MapScreen>
                                 ),
                               ],
                             ),
-
-                          // Event markers
                           if (_filteredEvents.isNotEmpty)
                             MarkerLayer(
                               markers: _filteredEvents.map((event) {
@@ -421,8 +425,6 @@ class _MapScreenState extends State<MapScreen>
                             ),
                         ],
                       ),
-
-                      // Empty state overlay
                       if (_filteredEvents.isEmpty)
                         Center(
                           child: _Glass(
@@ -452,8 +454,6 @@ class _MapScreenState extends State<MapScreen>
                             ),
                           ),
                         ),
-
-                      // ── Glass zoom / locate FABs ──
                       Positioned(
                         bottom: 20,
                         right: 16,
@@ -480,8 +480,6 @@ class _MapScreenState extends State<MapScreen>
                           ],
                         ),
                       ),
-
-                      // ── Active filter count badge ──
                       if (_selectedCategory != null || _selectedStatus != null)
                         Positioned(
                           bottom: 20,
@@ -528,10 +526,6 @@ class _MapScreenState extends State<MapScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  AMBIENT BLOBS  (same as HomeScreen)
-  // ─────────────────────────────────────────────
-
   Widget _buildAmbientBlobs() {
     return Stack(
       children: [
@@ -575,10 +569,6 @@ class _MapScreenState extends State<MapScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  GLASS HEADER  (matches HomeScreen exactly)
-  // ─────────────────────────────────────────────
-
   Widget _buildHeader() {
     final hasFilters = _selectedCategory != null || _selectedStatus != null;
 
@@ -596,14 +586,11 @@ class _MapScreenState extends State<MapScreen>
           ),
           child: Row(
             children: [
-              // Back button
               _buildGlassIconButton(
                 icon: Icons.arrow_back_rounded,
                 onPressed: () => Navigator.pop(context),
               ),
               const SizedBox(width: 14),
-
-              // Title + event count pill
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -672,8 +659,6 @@ class _MapScreenState extends State<MapScreen>
                   ],
                 ),
               ),
-
-              // Legend button
               _buildGlassIconButton(
                 icon: Icons.info_outline_rounded,
                 onPressed: _showLegend,
@@ -704,10 +689,6 @@ class _MapScreenState extends State<MapScreen>
       ),
     );
   }
-
-  // ─────────────────────────────────────────────
-  //  GLASS FILTER BARS
-  // ─────────────────────────────────────────────
 
   Widget _buildStatusFilterBar() {
     return ClipRect(
@@ -802,7 +783,6 @@ class _MapScreenState extends State<MapScreen>
     );
   }
 
-  /// Glass chip — replaces plain Material FilterChip
   Widget _buildGlassChip({
     required String label,
     required bool selected,
@@ -847,10 +827,6 @@ class _MapScreenState extends State<MapScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  GLASS FAB  (replaces solid FloatingActionButton)
-  // ─────────────────────────────────────────────
-
   Widget _buildGlassFab({
     required String heroTag,
     required IconData icon,
@@ -886,225 +862,6 @@ class _MapScreenState extends State<MapScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  EVENT DETAILS BOTTOM SHEET  (glass)
-  // ─────────────────────────────────────────────
-
-  void _showEventDetails(EventModel event) {
-    final catColor = AppConstants.getCategoryColor(event.category);
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      builder: (_) => ClipRRect(
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.82),
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(28)),
-              border: Border(
-                top:
-                    BorderSide(color: Colors.white.withOpacity(0.55), width: 1),
-              ),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Handle
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppTheme.timelineInactive,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 18),
-
-                // Title row
-                Row(
-                  children: [
-                    _Glass(
-                      borderRadius: BorderRadius.circular(14),
-                      opacity: 0.15,
-                      tint: catColor,
-                      blur: 10,
-                      border: Border.all(
-                          color: catColor.withOpacity(0.30), width: 1),
-                      padding: const EdgeInsets.all(10),
-                      child: Text(event.getMarkerIcon(),
-                          style: const TextStyle(fontSize: 24)),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Text(
-                        event.title,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.textPrimary,
-                          letterSpacing: -0.3,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-
-                // Category pill
-                Row(
-                  children: [
-                    _Glass(
-                      borderRadius: BorderRadius.circular(20),
-                      opacity: 0.14,
-                      tint: catColor,
-                      blur: 10,
-                      border: Border.all(
-                          color: catColor.withOpacity(0.35), width: 1),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 5),
-                      child: Text(
-                        event.getCategoryDisplayName(),
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: catColor,
-                        ),
-                      ),
-                    ),
-                    if (event.category == 'දන්සල' &&
-                        event.foodType != 'none') ...[
-                      const SizedBox(width: 8),
-                      _Glass(
-                        borderRadius: BorderRadius.circular(20),
-                        opacity: 0.55,
-                        tint: Colors.white,
-                        blur: 10,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 5),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.restaurant_rounded,
-                                size: 12,
-                                color: AppTheme.textSecondary.withOpacity(0.8)),
-                            const SizedBox(width: 5),
-                            Text(
-                              event.foodType,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: AppTheme.textSecondary.withOpacity(0.9),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                // Detail rows inside a glass panel
-                _Glass(
-                  borderRadius: BorderRadius.circular(18),
-                  opacity: 0.50,
-                  tint: Colors.white,
-                  blur: 10,
-                  padding: const EdgeInsets.all(14),
-                  child: Column(
-                    children: [
-                      _buildDetailRow(Icons.calendar_today_rounded, event.date),
-                      const SizedBox(height: 10),
-                      _buildDetailRow(Icons.access_time_rounded, event.time),
-                      const SizedBox(height: 10),
-                      _buildDetailRow(Icons.location_on_rounded, event.location,
-                          isMultiline: true),
-                      if (event.description != null &&
-                          event.description!.isNotEmpty) ...[
-                        const SizedBox(height: 10),
-                        _buildDetailRow(Icons.notes_rounded, event.description!,
-                            isMultiline: true),
-                      ],
-                      const SizedBox(height: 10),
-                      _buildDetailRow(Icons.person_outline_rounded,
-                          'Created by: ${event.createdBy}'),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // Close button
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.pop(context),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.primary,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16)),
-                    ),
-                    child: const Text('Close',
-                        style: TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.w600)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDetailRow(IconData icon, String text,
-      {bool isMultiline = false}) {
-    return Row(
-      crossAxisAlignment:
-          isMultiline ? CrossAxisAlignment.start : CrossAxisAlignment.center,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(6),
-          decoration: BoxDecoration(
-            color: AppTheme.primary.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(icon, size: 14, color: AppTheme.primary),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            text,
-            style: TextStyle(
-              fontSize: 13,
-              color: AppTheme.textSecondary.withOpacity(0.9),
-              height: 1.4,
-            ),
-            maxLines: isMultiline ? 3 : 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ─────────────────────────────────────────────
-  //  LEGEND BOTTOM SHEET  (glass)
-  // ─────────────────────────────────────────────
-
   void _showLegend() {
     showModalBottomSheet(
       context: context,
@@ -1135,7 +892,6 @@ class _MapScreenState extends State<MapScreen>
                 ),
                 child: Column(
                   children: [
-                    // Handle + title (fixed)
                     Padding(
                       padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
                       child: Column(
@@ -1170,14 +926,11 @@ class _MapScreenState extends State<MapScreen>
                         ],
                       ),
                     ),
-
-                    // Scrollable body
                     Expanded(
                       child: ListView(
                         controller: scrollController,
                         padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
                         children: [
-                          // Your location item
                           _buildLegendCard(
                             child: Row(
                               children: [
@@ -1214,8 +967,6 @@ class _MapScreenState extends State<MapScreen>
                             ),
                           ),
                           const SizedBox(height: 12),
-
-                          // Zoom level guide
                           _buildLegendCard(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1256,8 +1007,6 @@ class _MapScreenState extends State<MapScreen>
                             ),
                           ),
                           const SizedBox(height: 16),
-
-                          // Category header
                           const Text(
                             'Event Categories',
                             style: TextStyle(
@@ -1268,8 +1017,6 @@ class _MapScreenState extends State<MapScreen>
                             ),
                           ),
                           const SizedBox(height: 10),
-
-                          // Category entries
                           ...AppConstants.eventCategories.map((category) {
                             final color =
                                 AppConstants.getCategoryColor(category);

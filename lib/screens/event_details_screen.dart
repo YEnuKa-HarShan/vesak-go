@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/event_model.dart';
 import '../models/memory_model.dart';
 import '../services/supabase_service.dart';
@@ -12,55 +13,7 @@ import '../services/memory_service.dart';
 import '../constants.dart';
 import '../theme/app_theme.dart';
 import 'create_memory_screen.dart';
-
-// ─────────────────────────────────────────────────────────────
-//  Glass helper
-// ─────────────────────────────────────────────────────────────
-
-class _Glass extends StatelessWidget {
-  final Widget child;
-  final BorderRadius? borderRadius;
-  final EdgeInsetsGeometry? padding;
-  final Color tint;
-  final double blur;
-  final double opacity;
-  final Border? border;
-
-  const _Glass({
-    required this.child,
-    this.borderRadius,
-    this.padding,
-    this.tint = Colors.white,
-    this.blur = 18,
-    this.opacity = 0.10,
-    this.border,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final br = borderRadius ?? BorderRadius.circular(20);
-    return ClipRRect(
-      borderRadius: br,
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: tint.withOpacity(opacity),
-            borderRadius: br,
-            border: border ??
-                Border.all(color: Colors.white.withOpacity(0.18), width: 1),
-          ),
-          child: child,
-        ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-//  Screen
-// ─────────────────────────────────────────────────────────────
+import 'create_event_screen.dart';
 
 class EventDetailsScreen extends StatefulWidget {
   final EventModel event;
@@ -166,7 +119,6 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
     }
 
     if (_hasMemory) {
-      // Edit existing memory
       final memory = await _memoryService.getMemoryByEvent(
         widget.event.id,
         _sessionService.currentUser!.id,
@@ -192,7 +144,6 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
         }
       }
     } else {
-      // Create new memory
       final result = await Navigator.push(
         context,
         MaterialPageRoute(
@@ -217,6 +168,14 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
     );
   }
 
+  void _openInMaps() async {
+    final url =
+        'https://www.google.com/maps/search/?api=1&query=${widget.event.latitude},${widget.event.longitude}';
+    if (await canLaunchUrl(Uri.parse(url))) {
+      await launchUrl(Uri.parse(url));
+    }
+  }
+
   void _showLoginRequired() {
     ScaffoldMessenger.of(context).showSnackBar(
       _buildSnackBar('Please login to use this feature', Icons.lock_outline),
@@ -238,6 +197,29 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
     );
   }
 
+  bool _isEventActive() {
+    try {
+      final eventDate = DateTime.parse(widget.event.date);
+      final now = DateTime.now();
+      if (eventDate.year == now.year &&
+          eventDate.month == now.month &&
+          eventDate.day == now.day) {
+        final timeStr = widget.event.time.toLowerCase();
+        final isPM = timeStr.contains('pm');
+        final parts =
+            timeStr.replaceAll(RegExp(r'[apm]'), '').trim().split(':');
+        int hour = int.parse(parts[0]);
+        final minute = int.parse(parts[1]);
+        if (isPM && hour != 12) hour += 12;
+        if (!isPM && hour == 12) hour = 0;
+        final eventDateTime = DateTime(
+            eventDate.year, eventDate.month, eventDate.day, hour, minute);
+        return eventDateTime.isAfter(DateTime.now());
+      }
+    } catch (_) {}
+    return false;
+  }
+
   String _formatDate(String dateString) {
     try {
       final date = DateTime.parse(dateString);
@@ -247,60 +229,110 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
     }
   }
 
-  // ─────────────────────────────────────────────
-  //  BUILD ROOT
-  // ─────────────────────────────────────────────
+  Future<void> _editEvent() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CreateEventScreen(
+          userId: _sessionService.currentUser!.id,
+          userFirstName: _sessionService.currentUser!.firstName,
+          editEvent: widget.event,
+        ),
+      ),
+    );
+    if (result == true && mounted) {
+      Navigator.pop(context, true);
+    }
+  }
+
+  Future<void> _deleteEvent() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Delete Event',
+            style: TextStyle(fontWeight: FontWeight.w700)),
+        content: const Text('Are you sure you want to delete this event?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: AppTheme.error),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true && mounted) {
+      await _supabaseService.deleteEvent(widget.event.id);
+      if (mounted) Navigator.pop(context, true);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final categoryColor = AppConstants.getCategoryColor(widget.event.category);
     final icon = widget.event.getMarkerIcon();
+    final isActive = _isEventActive();
+    final isOwner = _sessionService.isLoggedIn &&
+        widget.event.userId == _sessionService.currentUser?.id;
 
     return Scaffold(
       backgroundColor: AppTheme.background,
       body: Stack(
         children: [
-          // ── Ambient blobs ──
+          // Ambient Blobs
           _buildAmbientBlobs(categoryColor),
 
-          // ── Main scroll content ──
+          // Main Content
           CustomScrollView(
             physics: const BouncingScrollPhysics(),
             slivers: [
-              // ── Hero sliver ──
+              // Hero Section
               SliverToBoxAdapter(
-                child: _buildHeroSection(categoryColor, icon),
+                child: _buildHeroSection(categoryColor, icon, isActive),
               ),
 
-              // ── Content ──
+              // Content Section
               SliverToBoxAdapter(
                 child: FadeTransition(
                   opacity: _fadeController,
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+                    padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // Title
+                        _buildTitleSection(categoryColor),
                         const SizedBox(height: 20),
-                        _buildTitleSection(categoryColor, icon),
-                        const SizedBox(height: 20),
-                        _buildInfoCard(),
-                        if (widget.event.description != null &&
-                            widget.event.description!.isNotEmpty) ...[
-                          const SizedBox(height: 16),
-                          _buildDescriptionCard(),
-                        ],
+
+                        // Date & Time Card
+                        _buildDateTimeCard(),
                         const SizedBox(height: 16),
-                        _buildMemoryAction(),
-                        const SizedBox(height: 8),
-                        _buildMetaCard(),
+
+                        // Location Card with Map Preview
+                        _buildLocationCard(),
+                        const SizedBox(height: 16),
+
+                        // Description Card
+                        if (widget.event.description != null &&
+                            widget.event.description!.isNotEmpty)
+                          _buildDescriptionCard(),
+                        const SizedBox(height: 16),
+
+                        // Creator Info
+                        _buildCreatorCard(),
                         const SizedBox(height: 24),
-                        if (_sessionService.isLoggedIn &&
-                            widget.event.userId ==
-                                _sessionService.currentUser?.id) ...[
-                          _buildOwnerActions(),
-                          const SizedBox(height: 12),
-                        ],
+
+                        // Action Buttons
+                        _buildActionButtons(isOwner),
+                        const SizedBox(height: 12),
+
+                        // Close Button
                         _buildCloseButton(),
                         const SizedBox(height: 20),
                       ],
@@ -311,16 +343,12 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
             ],
           ),
 
-          // ── Floating back + actions bar ──
-          SafeArea(child: _buildFloatingAppBar()),
+          // Floating App Bar
+          SafeArea(child: _buildFloatingAppBar(isOwner)),
         ],
       ),
     );
   }
-
-  // ─────────────────────────────────────────────
-  //  AMBIENT BLOBS
-  // ─────────────────────────────────────────────
 
   Widget _buildAmbientBlobs(Color categoryColor) {
     return Stack(
@@ -365,119 +393,26 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  FLOATING APP BAR
-  // ─────────────────────────────────────────────
-
-  Widget _buildFloatingAppBar() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Row(
-        children: [
-          // Back button
-          _Glass(
-            borderRadius: BorderRadius.circular(14),
-            blur: 16,
-            opacity: 0.55,
-            tint: Colors.white,
-            border: Border.all(color: Colors.white.withOpacity(0.35), width: 1),
-            child: SizedBox(
-              width: 44,
-              height: 44,
-              child: IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
-                color: AppTheme.primary,
-                onPressed: () => Navigator.pop(context),
-                padding: EdgeInsets.zero,
-              ),
-            ),
-          ),
-
-          const Spacer(),
-
-          // Bookmark button
-          _Glass(
-            borderRadius: BorderRadius.circular(14),
-            blur: 16,
-            opacity: 0.55,
-            tint: Colors.white,
-            border: Border.all(color: Colors.white.withOpacity(0.35), width: 1),
-            child: SizedBox(
-              width: 44,
-              height: 44,
-              child: _isLoading
-                  ? const Center(
-                      child: SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppTheme.primary,
-                        ),
-                      ),
-                    )
-                  : IconButton(
-                      icon: Icon(
-                        _isBookmarked
-                            ? Icons.bookmark_rounded
-                            : Icons.bookmark_border_rounded,
-                        size: 20,
-                      ),
-                      color: _isBookmarked ? AppTheme.accent : AppTheme.primary,
-                      onPressed: _toggleBookmark,
-                      padding: EdgeInsets.zero,
-                    ),
-            ),
-          ),
-
-          const SizedBox(width: 8),
-
-          // Share button
-          _Glass(
-            borderRadius: BorderRadius.circular(14),
-            blur: 16,
-            opacity: 0.55,
-            tint: Colors.white,
-            border: Border.all(color: Colors.white.withOpacity(0.35), width: 1),
-            child: SizedBox(
-              width: 44,
-              height: 44,
-              child: IconButton(
-                icon: const Icon(Icons.ios_share_rounded, size: 18),
-                color: AppTheme.primary,
-                onPressed: _shareEvent,
-                padding: EdgeInsets.zero,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ─────────────────────────────────────────────
-  //  HERO SECTION
-  // ─────────────────────────────────────────────
-
-  Widget _buildHeroSection(Color categoryColor, String icon) {
+  Widget _buildHeroSection(Color categoryColor, String icon, bool isActive) {
     return Stack(
       children: [
-        // ── Image / gradient background ──
+        // Hero Image
         SizedBox(
-          height: 300,
+          height: 320,
           width: double.infinity,
           child: widget.event.hasImage
               ? CachedNetworkImage(
                   imageUrl: widget.event.imageUrl,
                   fit: BoxFit.cover,
-                  placeholder: (_, __) => _buildHeroGradient(categoryColor),
+                  placeholder: (_, __) =>
+                      _buildHeroGradient(categoryColor, icon),
                   errorWidget: (_, __, ___) =>
-                      _buildHeroGradient(categoryColor),
+                      _buildHeroGradient(categoryColor, icon),
                 )
-              : _buildHeroGradient(categoryColor),
+              : _buildHeroGradient(categoryColor, icon),
         ),
 
-        // ── Scrim ──
+        // Gradient Overlay
         Positioned.fill(
           child: Container(
             decoration: BoxDecoration(
@@ -486,24 +421,25 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
                 end: Alignment.bottomCenter,
                 colors: [
                   Colors.transparent,
-                  Colors.black.withOpacity(0.45),
+                  Colors.black.withOpacity(0.3),
+                  Colors.black.withOpacity(0.6),
                 ],
+                stops: const [0.5, 0.8, 1.0],
               ),
             ),
           ),
         ),
 
-        // ── Bottom-left category badge ──
+        // Category Badge (Bottom Left)
         Positioned(
           bottom: 20,
           left: 16,
-          child: _Glass(
-            borderRadius: BorderRadius.circular(20),
-            blur: 16,
-            opacity: 0.75,
-            tint: Colors.white,
-            border: Border.all(color: Colors.white.withOpacity(0.45), width: 1),
+          child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.6),
+              borderRadius: BorderRadius.circular(20),
+            ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -522,40 +458,65 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
           ),
         ),
 
-        // ── Bottom-right date chip ──
-        Positioned(
-          bottom: 20,
-          right: 16,
-          child: _Glass(
-            borderRadius: BorderRadius.circular(20),
-            blur: 16,
-            opacity: 0.75,
-            tint: Colors.white,
-            border: Border.all(color: Colors.white.withOpacity(0.45), width: 1),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.calendar_today_rounded,
-                    size: 11, color: AppTheme.textSecondary.withOpacity(0.8)),
-                const SizedBox(width: 5),
-                Text(
-                  widget.event.date,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.textSecondary.withOpacity(0.85),
+        // Food Type Badge (Bottom Left, next to category)
+        if (widget.event.category == 'දන්සල' && widget.event.foodType != 'none')
+          Positioned(
+            bottom: 20,
+            left: 160,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.6),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.restaurant_rounded,
+                      size: 12, color: AppTheme.accent),
+                  const SizedBox(width: 4),
+                  Text(
+                    widget.event.foodType,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
+
+        // Active Status Badge (Top Right)
+        if (isActive)
+          Positioned(
+            top: 20,
+            right: 16,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppTheme.success.withOpacity(0.9),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.fiber_manual_record, size: 8, color: Colors.white),
+                  SizedBox(width: 6),
+                  Text('Active Now',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
+          ),
       ],
     );
   }
 
-  Widget _buildHeroGradient(Color categoryColor) {
+  Widget _buildHeroGradient(Color categoryColor, String icon) {
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -563,19 +524,22 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
           end: Alignment.bottomRight,
           colors: [
             categoryColor.withOpacity(0.85),
-            categoryColor.withOpacity(0.50),
-            AppTheme.primary.withOpacity(0.30),
+            categoryColor.withOpacity(0.60),
+            AppTheme.primary.withOpacity(0.40),
           ],
+        ),
+      ),
+      child: Align(
+        alignment: const Alignment(0.8, -0.6),
+        child: Opacity(
+          opacity: 0.15,
+          child: Text(icon, style: const TextStyle(fontSize: 120)),
         ),
       ),
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  TITLE SECTION
-  // ─────────────────────────────────────────────
-
-  Widget _buildTitleSection(Color categoryColor, String icon) {
+  Widget _buildTitleSection(Color categoryColor) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -586,21 +550,19 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
             fontWeight: FontWeight.w800,
             color: AppTheme.textPrimary,
             letterSpacing: -0.6,
-            height: 1.15,
+            height: 1.2,
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         Row(
           children: [
-            // Category pill
-            _Glass(
-              borderRadius: BorderRadius.circular(20),
-              blur: 8,
-              opacity: 0.55,
-              tint: categoryColor,
-              border:
-                  Border.all(color: categoryColor.withOpacity(0.25), width: 1),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            // Category Chip
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: categoryColor.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(20),
+              ),
               child: Text(
                 widget.event.getCategoryDisplayName(),
                 style: TextStyle(
@@ -610,118 +572,219 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
                 ),
               ),
             ),
-
             if (widget.event.category == 'දන්සල' &&
-                widget.event.foodType != 'none') ...[
+                widget.event.foodType != 'none')
               const SizedBox(width: 8),
-              _Glass(
-                borderRadius: BorderRadius.circular(20),
-                blur: 8,
-                opacity: 0.55,
-                tint: Colors.white,
-                border:
-                    Border.all(color: Colors.white.withOpacity(0.35), width: 1),
+            if (widget.event.category == 'දන්සල' &&
+                widget.event.foodType != 'none')
+              Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.grey.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.grey.withOpacity(0.2)),
+                ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(Icons.restaurant_rounded,
                         size: 12, color: AppTheme.accent),
-                    const SizedBox(width: 5),
+                    const SizedBox(width: 4),
                     Text(
                       widget.event.foodType,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.textPrimary,
+                        fontWeight: FontWeight.w500,
+                        color: AppTheme.textSecondary,
                       ),
                     ),
                   ],
                 ),
               ),
-            ],
           ],
         ),
       ],
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  INFO CARD  (date · time · location)
-  // ─────────────────────────────────────────────
-
-  Widget _buildInfoCard() {
-    return _buildGlassCard(
+  Widget _buildDateTimeCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.60),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.55), width: 1),
+      ),
       child: Column(
         children: [
-          _buildInfoRow(
-            icon: Icons.calendar_today_rounded,
-            label: 'Date',
-            value: _formatDate(widget.event.date),
-            iconColor: AppTheme.primary,
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.calendar_today_rounded,
+                    size: 18, color: AppTheme.primary),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Date',
+                        style: TextStyle(
+                            fontSize: 12, color: AppTheme.textSecondary)),
+                    const SizedBox(height: 2),
+                    Text(
+                      _formatDate(widget.event.date),
+                      style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.textPrimary),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          _buildDivider(),
-          _buildInfoRow(
-            icon: Icons.access_time_rounded,
-            label: 'Time',
-            value: widget.event.time,
-            iconColor: AppTheme.primary,
-          ),
-          _buildDivider(),
-          _buildInfoRow(
-            icon: Icons.location_on_rounded,
-            label: 'Location',
-            value: widget.event.location,
-            iconColor: AppTheme.primary,
-            isMultiline: true,
+          const SizedBox(height: 12),
+          Divider(color: Colors.grey.withOpacity(0.2)),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.access_time_rounded,
+                    size: 18, color: AppTheme.primary),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Time',
+                        style: TextStyle(
+                            fontSize: 12, color: AppTheme.textSecondary)),
+                    const SizedBox(height: 2),
+                    Text(
+                      widget.event.time,
+                      style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.textPrimary),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  DESCRIPTION CARD
-  // ─────────────────────────────────────────────
-
-  Widget _buildDescriptionCard() {
-    return _buildGlassCard(
-      child: Padding(
+  Widget _buildLocationCard() {
+    return GestureDetector(
+      onTap: _openInMaps,
+      child: Container(
         padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.60),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white.withOpacity(0.55), width: 1),
+        ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 Container(
-                  width: 32,
-                  height: 32,
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: AppTheme.primary.withOpacity(0.10),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(Icons.description_rounded,
-                      size: 16, color: AppTheme.primary),
+                  child: const Icon(Icons.location_on_rounded,
+                      size: 18, color: AppTheme.primary),
                 ),
-                const SizedBox(width: 10),
-                const Text(
-                  'About this Event',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.textPrimary,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Location',
+                          style: TextStyle(
+                              fontSize: 12, color: AppTheme.textSecondary)),
+                      const SizedBox(height: 2),
+                      Text(
+                        widget.event.location,
+                        style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: AppTheme.textPrimary),
+                      ),
+                    ],
                   ),
                 ),
+                Icon(Icons.chevron_right,
+                    size: 20, color: AppTheme.textSecondary),
               ],
             ),
             const SizedBox(height: 12),
-            Text(
-              widget.event.description!,
-              style: const TextStyle(
-                fontSize: 14,
-                color: AppTheme.textSecondary,
-                height: 1.6,
+            // Mini Map Preview
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                height: 100,
+                width: double.infinity,
+                color: Colors.grey[200],
+                child: Stack(
+                  children: [
+                    Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.map, size: 32, color: Colors.grey[400]),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Tap to open in maps',
+                            style: TextStyle(
+                                fontSize: 11, color: Colors.grey[500]),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Positioned(
+                      bottom: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.6),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.open_in_new,
+                                size: 10, color: Colors.white),
+                            SizedBox(width: 4),
+                            Text('Open Maps',
+                                style: TextStyle(
+                                    fontSize: 10, color: Colors.white)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -730,298 +793,246 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  MEMORY ACTION BUTTON
-  // ─────────────────────────────────────────────
-
-  Widget _buildMemoryAction() {
-    return _Glass(
-      borderRadius: BorderRadius.circular(16),
-      blur: 12,
-      opacity: 0.90,
-      tint: _hasMemory ? AppTheme.memoryPrimary : AppTheme.memoryPrimary,
-      border: Border.all(
-        color: AppTheme.memoryPrimary.withOpacity(0.30),
-        width: 1,
+  Widget _buildDescriptionCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.60),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.55), width: 1),
       ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: _handleMemoryAction,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  _hasMemory ? Icons.edit_note_rounded : Icons.memory_rounded,
-                  size: 18,
-                  color: Colors.white,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  _hasMemory ? 'Update Memory' : 'Add Memory',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ─────────────────────────────────────────────
-  //  META CARD  (created by)
-  // ─────────────────────────────────────────────
-
-  Widget _buildMetaCard() {
-    return _buildGlassCard(
-      child: _buildInfoRow(
-        icon: Icons.person_rounded,
-        label: 'Created by',
-        value: widget.event.createdBy,
-        iconColor: AppTheme.textSecondary,
-      ),
-    );
-  }
-
-  // ─────────────────────────────────────────────
-  //  OWNER ACTIONS  (edit / delete)
-  // ─────────────────────────────────────────────
-
-  Widget _buildOwnerActions() {
-    return Row(
-      children: [
-        Expanded(
-          child: _Glass(
-            borderRadius: BorderRadius.circular(16),
-            blur: 12,
-            opacity: 0.55,
-            tint: Colors.white,
-            border:
-                Border.all(color: AppTheme.primary.withOpacity(0.30), width: 1),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(16),
-                onTap: () => Navigator.pop(context),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: const [
-                      Icon(Icons.edit_rounded,
-                          size: 16, color: AppTheme.primary),
-                      SizedBox(width: 8),
-                      Text(
-                        'Edit Event',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.primary,
-                        ),
-                      ),
-                    ],
-                  ),
+                child: const Icon(Icons.description_rounded,
+                    size: 18, color: AppTheme.primary),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'About this Event',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textPrimary,
                 ),
               ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            widget.event.description!,
+            style: const TextStyle(
+              fontSize: 14,
+              color: AppTheme.textSecondary,
+              height: 1.6,
             ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _Glass(
-            borderRadius: BorderRadius.circular(16),
-            blur: 12,
-            opacity: 0.55,
-            tint: Colors.white,
-            border:
-                Border.all(color: AppTheme.error.withOpacity(0.40), width: 1),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(16),
-                onTap: _confirmDelete,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: const [
-                      Icon(Icons.delete_outline_rounded,
-                          size: 16, color: AppTheme.error),
-                      SizedBox(width: 8),
-                      Text(
-                        'Delete',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.error,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _confirmDelete() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Delete Event',
-            style: TextStyle(fontWeight: FontWeight.w700)),
-        content: const Text('Are you sure you want to delete this event?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: AppTheme.error),
-            child: const Text('Delete'),
           ),
         ],
       ),
     );
-    if (confirm == true && mounted) {
-      await _supabaseService.deleteEvent(widget.event.id);
-      if (mounted) Navigator.pop(context, true);
-    }
   }
 
-  // ─────────────────────────────────────────────
-  //  CLOSE BUTTON
-  // ─────────────────────────────────────────────
+  Widget _buildCreatorCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.60),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.55), width: 1),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withOpacity(0.10),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.person_rounded,
+                size: 18, color: AppTheme.primary),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Created by',
+                    style:
+                        TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                const SizedBox(height: 2),
+                Text(
+                  widget.event.createdBy,
+                  style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textPrimary),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-  Widget _buildCloseButton() {
-    return _Glass(
-      borderRadius: BorderRadius.circular(16),
-      blur: 12,
-      opacity: 0.90,
-      tint: AppTheme.primary,
-      border: Border.all(color: AppTheme.primary.withOpacity(0.30), width: 1),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () => Navigator.pop(context),
-          child: const SizedBox(
+  Widget _buildActionButtons(bool isOwner) {
+    return Column(
+      children: [
+        if (!isOwner)
+          SizedBox(
             width: double.infinity,
-            child: Padding(
-              padding: EdgeInsets.symmetric(vertical: 15),
-              child: Center(
-                child: Text(
-                  'Close',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
+            child: ElevatedButton.icon(
+              onPressed: _handleMemoryAction,
+              icon: Icon(
+                  _hasMemory ? Icons.edit_note_rounded : Icons.memory_rounded,
+                  size: 20),
+              label: Text(_hasMemory ? 'Update Memory' : 'Add Memory'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _hasMemory
+                    ? AppTheme.memoryPrimary
+                    : AppTheme.memoryPrimary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
+              ),
+            ),
+          ),
+        if (isOwner) ...[
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _editEvent,
+                  icon: const Icon(Icons.edit_rounded, size: 18),
+                  label: const Text('Edit Event'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.primary,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16)),
                   ),
                 ),
               ),
-            ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _deleteEvent,
+                  icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                  label: const Text('Delete'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.error,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16)),
+                  ),
+                ),
+              ),
+            ],
           ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildCloseButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: () => Navigator.pop(context),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppTheme.primary,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         ),
+        child: const Text('Close',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
       ),
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  SHARED WIDGETS
-  // ─────────────────────────────────────────────
-
-  Widget _buildGlassCard({required Widget child}) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.60),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.white.withOpacity(0.55), width: 1),
-          ),
-          child: child,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDivider() {
-    return Divider(
-      color: AppTheme.timelineInactive.withOpacity(0.50),
-      height: 1,
-      thickness: 0.5,
-      indent: 16,
-      endIndent: 16,
-    );
-  }
-
-  Widget _buildInfoRow({
-    required IconData icon,
-    required String label,
-    required String value,
-    required Color iconColor,
-    bool isMultiline = false,
-  }) {
+  Widget _buildFloatingAppBar(bool isOwner) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
-        crossAxisAlignment:
-            isMultiline ? CrossAxisAlignment.start : CrossAxisAlignment.center,
         children: [
-          // Icon bubble
+          // Back Button
           Container(
-            width: 36,
-            height: 36,
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
-              color: iconColor.withOpacity(0.10),
-              borderRadius: BorderRadius.circular(10),
+              color: Colors.white.withOpacity(0.55),
+              borderRadius: BorderRadius.circular(14),
+              border:
+                  Border.all(color: Colors.white.withOpacity(0.35), width: 1),
             ),
-            child: Icon(icon, size: 16, color: iconColor),
-          ),
-          const SizedBox(width: 12),
-
-          // Label
-          SizedBox(
-            width: 78,
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: AppTheme.textSecondary,
-              ),
+            child: IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+              color: AppTheme.primary,
+              onPressed: () => Navigator.pop(context),
+              padding: EdgeInsets.zero,
             ),
           ),
-          const SizedBox(width: 6),
-
-          // Value
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.textPrimary,
-                height: 1.4,
-              ),
-              maxLines: isMultiline ? 5 : 1,
-              overflow: TextOverflow.ellipsis,
+          const Spacer(),
+          // Bookmark Button
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.55),
+              borderRadius: BorderRadius.circular(14),
+              border:
+                  Border.all(color: Colors.white.withOpacity(0.35), width: 1),
+            ),
+            child: _isLoading
+                ? const Center(
+                    child: SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppTheme.primary,
+                      ),
+                    ),
+                  )
+                : IconButton(
+                    icon: Icon(
+                      _isBookmarked
+                          ? Icons.bookmark_rounded
+                          : Icons.bookmark_border_rounded,
+                      size: 20,
+                    ),
+                    color: _isBookmarked ? AppTheme.accent : AppTheme.primary,
+                    onPressed: _toggleBookmark,
+                    padding: EdgeInsets.zero,
+                  ),
+          ),
+          const SizedBox(width: 8),
+          // Share Button
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.55),
+              borderRadius: BorderRadius.circular(14),
+              border:
+                  Border.all(color: Colors.white.withOpacity(0.35), width: 1),
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.ios_share_rounded, size: 18),
+              color: AppTheme.primary,
+              onPressed: _shareEvent,
+              padding: EdgeInsets.zero,
             ),
           ),
         ],
