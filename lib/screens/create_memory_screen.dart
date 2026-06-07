@@ -3,11 +3,13 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:vesak_go/constants.dart';
 import '../models/event_model.dart';
 import '../services/memory_service.dart';
 import '../services/cloudinary_service.dart';
 import '../services/session_service.dart';
+import '../widgets/media_picker_grid.dart';
 import '../theme/app_theme.dart';
 
 class CreateMemoryScreen extends StatefulWidget {
@@ -80,23 +82,39 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
     super.dispose();
   }
 
-  Future<void> _pickImage() async {
-    if (_selectedImages.length >= _maxImages) {
+  Future<void> _pickMultipleImages() async {
+    final remainingSlots =
+        _maxImages - _selectedImages.length - _existingImageUrls.length;
+    if (remainingSlots <= 0) {
       _showSnack('Maximum $_maxImages images allowed', Icons.warning_rounded);
       return;
     }
 
-    final file = await _cloudinaryService.pickImage();
-    if (file != null) {
+    final picker = ImagePicker();
+    final List<XFile>? pickedFiles = await picker.pickMultiImage(
+      maxWidth: 1200,
+      maxHeight: 1200,
+      imageQuality: 85,
+    );
+
+    if (pickedFiles != null && pickedFiles.isNotEmpty) {
+      final filesToAdd = pickedFiles.take(remainingSlots);
       setState(() {
-        _selectedImages.add(file);
-        _imageUploadProgress[_selectedImages.length - 1] = 0;
+        for (final file in filesToAdd) {
+          _selectedImages.add(File(file.path));
+          _imageUploadProgress[_selectedImages.length - 1] = 0;
+        }
       });
+
+      if (pickedFiles.length > remainingSlots) {
+        _showSnack(
+            'Only $_maxImages images allowed. Added $remainingSlots images.',
+            Icons.info_rounded);
+      }
     }
   }
 
-  void _removeImage(int index,
-      {bool isExisting = false, int existingIndex = 0}) {
+  void _removeImage(int index, bool isExisting, int existingIndex) {
     setState(() {
       if (isExisting) {
         _existingImageUrls.removeAt(existingIndex);
@@ -109,18 +127,65 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
   }
 
   Future<void> _pickVideo() async {
-    if (_selectedVideo != null || _existingVideoUrl != null) {
-      _showSnack('Only one video allowed', Icons.warning_rounded);
-      return;
-    }
+    // Coming Soon feature
+    _showComingSoonDialog();
+    return;
+  }
 
-    final file = await _cloudinaryService.pickVideo();
-    if (file != null) {
-      setState(() {
-        _selectedVideo = file;
-        _videoUploadProgress = 0;
-      });
-    }
+  void _showComingSoonDialog() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 20),
+              decoration: BoxDecoration(
+                color: Colors.grey.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const Icon(Icons.videocam_rounded,
+                size: 48, color: AppTheme.memoryPrimary),
+            const SizedBox(height: 16),
+            const Text(
+              'Video Upload Coming Soon!',
+              style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textPrimary),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'We\'re working hard to bring you video uploads. Stay tuned!',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, color: AppTheme.textSecondary),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.memoryPrimary,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
+              ),
+              child: const Text('Got it', style: TextStyle(fontSize: 14)),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _removeVideo() {
@@ -147,7 +212,7 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
 
     List<String> finalImageUrls = List.from(_existingImageUrls);
     List<String> finalImagePublicIds = List.from(_existingImagePublicIds);
-    int totalFiles = _selectedImages.length + (_selectedVideo != null ? 1 : 0);
+    int totalFiles = _selectedImages.length;
     int completedFiles = 0;
 
     void updateProgress() {
@@ -187,38 +252,6 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
 
     String finalVideoUrl = _existingVideoUrl ?? '';
     String finalVideoPublicId = _existingVideoPublicId ?? '';
-
-    if (_selectedVideo != null) {
-      setState(() {
-        _isVideoUploading = true;
-        _uploadStatus = 'Uploading video...';
-        _videoUploadProgress = 0;
-      });
-
-      final result = await _cloudinaryService.uploadVideo(
-        _selectedVideo!,
-        'memories/${widget.event.id}',
-        onVideoProgress: (progress) {
-          setState(() {
-            _videoUploadProgress = progress;
-            _uploadStatus = 'Uploading video... ${(progress * 100).toInt()}%';
-          });
-        },
-      );
-
-      if (result != null) {
-        finalVideoUrl = _cloudinaryService.extractUrl(result);
-        finalVideoPublicId = _cloudinaryService.extractPublicId(result);
-        setState(() {
-          _videoUploadProgress = 1.0;
-        });
-      }
-      completedFiles++;
-      updateProgress();
-      setState(() {
-        _isVideoUploading = false;
-      });
-    }
 
     setState(() {
       _uploadStatus = 'Saving to database...';
@@ -291,12 +324,8 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
   Widget build(BuildContext context) {
     final dateFormat = DateFormat('MMMM d, yyyy · h:mm a');
     final eventDate = DateTime.tryParse(widget.event.date) ?? DateTime.now();
-    final totalImages = _existingImageUrls.length + _selectedImages.length;
     final hasVideo = _selectedVideo != null ||
         (_existingVideoUrl != null && _existingVideoUrl!.isNotEmpty);
-    final totalMedia = totalImages + (hasVideo ? 1 : 0);
-    final isUploadComplete =
-        !_isUploading || (_isUploading && _overallProgress >= 0.95);
 
     return Scaffold(
       backgroundColor: AppTheme.background,
@@ -316,11 +345,9 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
                         const SizedBox(height: 16),
                         _buildExperienceCard(),
                         const SizedBox(height: 16),
-                        _buildMediaCard(),
-                        const SizedBox(height: 16),
-                        if (_isUploading) _buildUploadProgressCard(totalMedia),
+                        _buildMediaSection(),
                         const SizedBox(height: 24),
-                        _buildSaveButton(isUploadComplete),
+                        _buildSaveButton(),
                         const SizedBox(height: 20),
                       ],
                     ),
@@ -369,52 +396,6 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
               Text('${(_overallProgress * 100).toInt()}%',
                   style:
                       TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildUploadProgressCard(int totalMedia) {
-    int completed = 0;
-    for (final progress in _imageUploadProgress.values) {
-      if (progress >= 1.0) completed++;
-    }
-    if (_videoUploadProgress >= 1.0 ||
-        (_existingVideoUrl != null && _existingVideoUrl!.isNotEmpty))
-      completed++;
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.60),
-              borderRadius: BorderRadius.circular(20),
-              border:
-                  Border.all(color: Colors.white.withOpacity(0.55), width: 1)),
-          child: Column(
-            children: [
-              Row(children: [
-                Icon(Icons.cloud_upload_rounded,
-                    size: 18, color: AppTheme.memoryPrimary),
-                const SizedBox(width: 8),
-                const Text('Upload Progress',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700))
-              ]),
-              const SizedBox(height: 12),
-              LinearProgressIndicator(
-                  value: _overallProgress,
-                  backgroundColor: Colors.grey.withOpacity(0.2),
-                  color: AppTheme.memoryPrimary,
-                  minHeight: 8),
-              const SizedBox(height: 8),
-              Text('${(_overallProgress * 100).toInt()}% - $_uploadStatus',
-                  style:
-                      TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
             ],
           ),
         ),
@@ -606,161 +587,112 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
     );
   }
 
-  Widget _buildMediaCard() {
-    final totalImages = _existingImageUrls.length + _selectedImages.length;
+  Widget _buildMediaSection() {
     final hasVideo = _selectedVideo != null ||
         (_existingVideoUrl != null && _existingVideoUrl!.isNotEmpty);
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.60),
-              borderRadius: BorderRadius.circular(20),
-              border:
-                  Border.all(color: Colors.white.withOpacity(0.55), width: 1)),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(children: [
-                Icon(Icons.photo_library_rounded,
-                    size: 18, color: AppTheme.memoryPrimary),
-                const SizedBox(width: 8),
-                const Text('Photos (Max $_maxImages)',
-                    style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: AppTheme.textPrimary))
-              ]),
-              const SizedBox(height: 12),
-              SizedBox(
-                height: 100,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
+    return Column(
+      children: [
+        // Photos Section with MediaPickerGrid
+        Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.60),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                      color: Colors.white.withOpacity(0.55), width: 1),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (totalImages < _maxImages) _buildAddImageButton(),
-                    ..._existingImageUrls.asMap().entries.map((entry) =>
-                        _buildImageItem(entry.value,
-                            isExisting: true, index: entry.key)),
-                    ..._selectedImages.asMap().entries.map((entry) =>
-                        _buildImageItem(entry.value.path,
-                            imageFile: _selectedImages[entry.key],
-                            index: entry.key,
-                            progress: _imageUploadProgress[entry.key])),
+                    Row(
+                      children: [
+                        Icon(Icons.photo_library_rounded,
+                            size: 18, color: AppTheme.memoryPrimary),
+                        const SizedBox(width: 8),
+                        const Text('Photos',
+                            style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: AppTheme.textPrimary)),
+                        const Spacer(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppTheme.memoryPrimary.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            'Max $_maxImages',
+                            style: TextStyle(
+                                fontSize: 11, color: AppTheme.memoryPrimary),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    // INTEGRATED MEDIA PICKER GRID
+                    MediaPickerGrid(
+                      selectedImages: _selectedImages,
+                      existingImageUrls: _existingImageUrls,
+                      uploadProgress: _imageUploadProgress,
+                      maxImages: _maxImages,
+                      onAddImage: _pickMultipleImages,
+                      onRemoveImage: _removeImage,
+                    ),
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
-              Divider(color: Colors.grey.withOpacity(0.2)),
-              const SizedBox(height: 12),
-              Row(children: [
-                Icon(Icons.videocam_rounded,
-                    size: 18, color: AppTheme.memoryPrimary),
-                const SizedBox(width: 8),
-                const Text('Video (Optional)',
-                    style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: AppTheme.textPrimary))
-              ]),
-              const SizedBox(height: 12),
-              if (!hasVideo) _buildAddVideoButton() else _buildVideoPreview(),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAddImageButton() {
-    return GestureDetector(
-      onTap: _pickImage,
-      child: Container(
-        width: 100,
-        height: 100,
-        margin: const EdgeInsets.only(right: 8),
-        decoration: BoxDecoration(
-            color: AppTheme.memoryPrimary.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-                color: AppTheme.memoryPrimary.withOpacity(0.3), width: 1.5)),
-        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(Icons.add_a_photo, size: 28, color: AppTheme.memoryPrimary),
-          const SizedBox(height: 4),
-          Text('Add',
-              style: TextStyle(fontSize: 12, color: AppTheme.memoryPrimary))
-        ]),
-      ),
-    );
-  }
-
-  Widget _buildImageItem(String url,
-      {bool isExisting = false,
-      File? imageFile,
-      required int index,
-      double? progress}) {
-    return Stack(
-      children: [
-        Container(
-          width: 100,
-          height: 100,
-          margin: const EdgeInsets.only(right: 8),
-          decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12), color: Colors.grey[200]),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: isExisting
-                ? Image.network(url,
-                    fit: BoxFit.cover,
-                    width: 100,
-                    height: 100,
-                    errorBuilder: (_, __, ___) =>
-                        Icon(Icons.broken_image, size: 40, color: Colors.grey))
-                : Image.file(imageFile!,
-                    fit: BoxFit.cover, width: 100, height: 100),
-          ),
-        ),
-        if (progress != null && progress < 1.0)
-          Positioned.fill(
-            child: Container(
-              decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.5),
-                  borderRadius: BorderRadius.circular(12)),
-              child: Center(
-                  child: SizedBox(
-                      width: 30,
-                      height: 30,
-                      child: CircularProgressIndicator(
-                          value: progress,
-                          strokeWidth: 2,
-                          color: Colors.white))),
             ),
           ),
-        if (progress == 1.0 && !isExisting)
-          Positioned(
-              top: 4,
-              right: 12,
+        ),
+        // Video Section
+        Container(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
               child: Container(
-                  decoration: BoxDecoration(
-                      color: Colors.green, shape: BoxShape.circle),
-                  child:
-                      const Icon(Icons.check, size: 16, color: Colors.white))),
-        Positioned(
-            top: 4,
-            right: 8,
-            child: GestureDetector(
-              onTap: () => _removeImage(index,
-                  isExisting: isExisting, existingIndex: index),
-              child: Container(
-                  decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.6),
-                      shape: BoxShape.circle),
-                  child:
-                      const Icon(Icons.close, size: 18, color: Colors.white)),
-            )),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.60),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                      color: Colors.white.withOpacity(0.55), width: 1),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.videocam_rounded,
+                            size: 18, color: AppTheme.memoryPrimary),
+                        const SizedBox(width: 8),
+                        const Text('Video (Optional)',
+                            style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: AppTheme.textPrimary)),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    if (!hasVideo)
+                      _buildAddVideoButton()
+                    else
+                      _buildVideoPreview(),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -772,87 +704,107 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(
-            color: AppTheme.memoryPrimary.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-                color: AppTheme.memoryPrimary.withOpacity(0.3), width: 1.5)),
-        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(Icons.play_circle_outline,
-              size: 28, color: AppTheme.memoryPrimary),
-          const SizedBox(width: 8),
-          Text('Add Video (Max 30 sec)',
-              style: TextStyle(
-                  fontSize: 14,
-                  color: AppTheme.memoryPrimary,
-                  fontWeight: FontWeight.w500))
-        ]),
+          color: AppTheme.memoryPrimary.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+              color: AppTheme.memoryPrimary.withOpacity(0.3), width: 1.5),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.play_circle_outline,
+                size: 28, color: AppTheme.memoryPrimary),
+            const SizedBox(width: 8),
+            Text('Coming Soon',
+                style: TextStyle(
+                    fontSize: 14,
+                    color: AppTheme.memoryPrimary,
+                    fontWeight: FontWeight.w500)),
+            const SizedBox(width: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                  color: AppTheme.accent,
+                  borderRadius: BorderRadius.circular(8)),
+              child: const Text('Video',
+                  style: TextStyle(
+                      fontSize: 10,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600)),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildVideoPreview() {
-    String? previewUrl;
-    if (_selectedVideo != null)
-      previewUrl = _selectedVideo!.path;
-    else if (_existingVideoUrl != null && _existingVideoUrl!.isNotEmpty)
-      previewUrl = _existingVideoUrl;
-
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-          color: AppTheme.accent.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(12),
-          border:
-              Border.all(color: AppTheme.accent.withOpacity(0.3), width: 1)),
+        color: AppTheme.accent.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.accent.withOpacity(0.3), width: 1),
+      ),
       child: Row(
         children: [
           Container(
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.5),
-                  borderRadius: BorderRadius.circular(8)),
-              child: const Icon(Icons.play_circle_filled,
-                  size: 40, color: Colors.white)),
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.5),
+                borderRadius: BorderRadius.circular(8)),
+            child: const Icon(Icons.play_circle_filled,
+                size: 40, color: Colors.white),
+          ),
           const SizedBox(width: 12),
           Expanded(
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Video attached',
-                  style: TextStyle(fontSize: 13, color: AppTheme.textPrimary)),
-              if (_isVideoUploading) ...[
-                const SizedBox(height: 4),
-                LinearProgressIndicator(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Video attached',
+                    style:
+                        TextStyle(fontSize: 13, color: AppTheme.textPrimary)),
+                if (_isVideoUploading) ...[
+                  const SizedBox(height: 4),
+                  LinearProgressIndicator(
                     value: _videoUploadProgress,
                     backgroundColor: Colors.grey.withOpacity(0.2),
                     color: AppTheme.accent,
-                    minHeight: 4),
-                Text('${(_videoUploadProgress * 100).toInt()}%',
-                    style:
-                        TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
+                    minHeight: 4,
+                  ),
+                  Text('${(_videoUploadProgress * 100).toInt()}%',
+                      style: TextStyle(
+                          fontSize: 10, color: AppTheme.textSecondary)),
+                ],
               ],
-            ]),
+            ),
           ),
           GestureDetector(
-              onTap: _removeVideo,
-              child: const Icon(Icons.close, size: 20, color: AppTheme.error)),
+            onTap: _removeVideo,
+            child: const Icon(Icons.close, size: 20, color: AppTheme.error),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildSaveButton(bool isEnabled) {
+  Widget _buildSaveButton() {
+    final isUploadComplete =
+        !_isUploading || (_isUploading && _overallProgress >= 0.95);
+
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton(
-        onPressed: _isSaving || !isEnabled ? null : _saveMemory,
+        onPressed: _isSaving || !isUploadComplete ? null : _saveMemory,
         style: ElevatedButton.styleFrom(
-            backgroundColor: AppTheme.memoryPrimary,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16))),
+          backgroundColor: AppTheme.memoryPrimary,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        ),
         child: _isSaving
             ? const SizedBox(
                 width: 24,
@@ -871,6 +823,7 @@ class _GlassIconButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onPressed;
   const _GlassIconButton({required this.icon, required this.onPressed});
+
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
@@ -878,18 +831,20 @@ class _GlassIconButton extends StatelessWidget {
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
         child: Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.55),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                    color: Colors.white.withOpacity(0.35), width: 1)),
-            child: IconButton(
-                icon: Icon(icon, size: 18),
-                color: AppTheme.primary,
-                onPressed: onPressed,
-                padding: EdgeInsets.zero)),
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.55),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.white.withOpacity(0.35), width: 1),
+          ),
+          child: IconButton(
+            icon: Icon(icon, size: 18),
+            color: AppTheme.primary,
+            onPressed: onPressed,
+            padding: EdgeInsets.zero,
+          ),
+        ),
       ),
     );
   }
@@ -903,30 +858,35 @@ class _Glass extends StatelessWidget {
   final double blur;
   final double opacity;
   final Border? border;
-  const _Glass(
-      {required this.child,
-      this.borderRadius,
-      this.padding,
-      this.tint = Colors.white,
-      this.blur = 18,
-      this.opacity = 0.10,
-      this.border});
+
+  const _Glass({
+    required this.child,
+    this.borderRadius,
+    this.padding,
+    this.tint = Colors.white,
+    this.blur = 18,
+    this.opacity = 0.10,
+    this.border,
+  });
+
   @override
   Widget build(BuildContext context) {
     final br = borderRadius ?? BorderRadius.circular(20);
     return ClipRRect(
       borderRadius: br,
       child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-          child: Container(
-              padding: padding,
-              decoration: BoxDecoration(
-                  color: tint.withOpacity(opacity),
-                  borderRadius: br,
-                  border: border ??
-                      Border.all(
-                          color: Colors.white.withOpacity(0.18), width: 1)),
-              child: child)),
+        filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+        child: Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            color: tint.withOpacity(opacity),
+            borderRadius: br,
+            border: border ??
+                Border.all(color: Colors.white.withOpacity(0.18), width: 1),
+          ),
+          child: child,
+        ),
+      ),
     );
   }
 }

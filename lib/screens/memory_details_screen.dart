@@ -89,8 +89,6 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
         vsync: this, duration: const Duration(milliseconds: 400))
       ..forward();
     _scrollController.addListener(_onScroll);
-
-    // Start auto-play with initial delay
     _startAutoPlayWithDelay();
   }
 
@@ -112,8 +110,6 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
 
   void _startAutoPlayWithDelay() {
     if (widget.memory.imageUrls.length <= 1) return;
-
-    // Show that auto-play will start soon
     _initialDelayTimer = Timer(const Duration(seconds: 3), () {
       if (mounted) {
         setState(() => _isInitialDelay = false);
@@ -125,7 +121,6 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
   void _startAutoPlay() {
     if (widget.memory.imageUrls.length <= 1) return;
     _stopAutoPlay();
-
     _autoPlayTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
       if (_isAutoPlaying && mounted) {
         setState(() {
@@ -160,6 +155,27 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
       _resumeAutoPlay();
     }
     setState(() {});
+  }
+
+  void _openFullScreenGallery() {
+    _pauseAutoPlay();
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        opaque: false,
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            FullScreenGallery(
+          images: widget.memory.imageUrls,
+          initialIndex: _currentImageIndex,
+          onClose: () {
+            _resumeAutoPlay();
+          },
+        ),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+      ),
+    );
   }
 
   Future<void> _deleteMemory() async {
@@ -231,74 +247,6 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
       '📝 My memory at ${widget.event.title}\n\n📅 Date visited: ${dateFormat.format(widget.memory.visitedAt)}\n📍 Location: ${widget.event.location}\n\n✨ Experience:\n${widget.memory.experienceNote}\n\nShared from VesakGO 🌼',
       subject: 'My Vesak Memory - ${widget.event.title}',
     );
-  }
-
-  void _showFullScreenImage(int index) {
-    _pauseAutoPlay();
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: EdgeInsets.zero,
-        child: Stack(
-          children: [
-            InteractiveViewer(
-              panEnabled: true,
-              scaleEnabled: true,
-              minScale: 0.5,
-              maxScale: 4.0,
-              child: CachedNetworkImage(
-                imageUrl: widget.memory.imageUrls[index],
-                fit: BoxFit.contain,
-                width: double.infinity,
-                height: double.infinity,
-                placeholder: (_, __) => const Center(
-                    child: CircularProgressIndicator(color: Colors.white)),
-                errorWidget: (_, __, ___) => const Center(
-                    child: Icon(Icons.broken_image,
-                        size: 50, color: Colors.white)),
-              ),
-            ),
-            Positioned(
-              top: 40,
-              right: 20,
-              child: GestureDetector(
-                onTap: () {
-                  _resumeAutoPlay();
-                  Navigator.pop(context);
-                },
-                child: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.5),
-                        shape: BoxShape.circle),
-                    child:
-                        const Icon(Icons.close, color: Colors.white, size: 24)),
-              ),
-            ),
-            if (widget.memory.imageUrls.length > 1)
-              Positioned(
-                bottom: 40,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.5),
-                        borderRadius: BorderRadius.circular(20)),
-                    child: Text(
-                        '${index + 1} / ${widget.memory.imageUrls.length}',
-                        style:
-                            const TextStyle(color: Colors.white, fontSize: 14)),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    ).then((_) => _resumeAutoPlay());
   }
 
   void _showVideo() {
@@ -380,6 +328,7 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
   Widget build(BuildContext context) {
     final categoryColor = AppConstants.getCategoryColor(widget.event.category);
     final hasMultipleImages = widget.memory.imageUrls.length > 1;
+    final hasVideo = widget.memory.hasVideo;
 
     return Scaffold(
       backgroundColor: AppTheme.background,
@@ -403,7 +352,7 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
               ),
               if (widget.memory.hasImages)
                 SliverToBoxAdapter(
-                    child: _buildMediaGallery(hasMultipleImages)),
+                    child: _buildMediaGallery(hasMultipleImages, hasVideo)),
               SliverToBoxAdapter(
                 child: FadeTransition(
                   opacity: _fadeController,
@@ -437,14 +386,14 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
     );
   }
 
-  Widget _buildMediaGallery(bool hasMultipleImages) {
+  Widget _buildMediaGallery(bool hasMultipleImages, bool hasVideo) {
     return SizedBox(
       height: 400,
       child: Stack(
         children: [
-          // Main Image
+          // Main Image (tap to open full-screen)
           GestureDetector(
-            onTap: () => _showFullScreenImage(_currentImageIndex),
+            onTap: _openFullScreenGallery,
             child: CachedNetworkImage(
               imageUrl: widget.memory.imageUrls[_currentImageIndex],
               width: double.infinity,
@@ -481,11 +430,32 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
               ),
             ),
           ),
+          // Auto-play button (Top Right)
+          if (hasMultipleImages)
+            Positioned(
+              top: 20,
+              right: 20,
+              child: GestureDetector(
+                onTap: _toggleAutoPlay,
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.5),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    _isAutoPlaying ? Icons.pause : Icons.play_arrow,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+              ),
+            ),
           // Auto-play starting soon indicator
           if (_isInitialDelay && hasMultipleImages)
             Positioned(
               top: 20,
-              right: 20,
+              right: 80,
               child: Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -496,11 +466,10 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
                 child: const Row(
                   children: [
                     SizedBox(
-                      width: 12,
-                      height: 12,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
-                    ),
+                        width: 12,
+                        height: 12,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white)),
                     SizedBox(width: 8),
                     Text('Auto-play starting...',
                         style: TextStyle(color: Colors.white, fontSize: 11)),
@@ -508,87 +477,46 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
                 ),
               ),
             ),
-          // Bottom controls row
+          // Image counter (Bottom Left)
           Positioned(
             bottom: 20,
             left: 16,
-            right: 16,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // Left group: Play/Pause + Image counter
-                Row(
-                  children: [
-                    if (hasMultipleImages)
-                      GestureDetector(
-                        onTap: _toggleAutoPlay,
-                        child: Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.5),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            _isAutoPlaying ? Icons.pause : Icons.play_arrow,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                        ),
-                      ),
-                    if (hasMultipleImages) const SizedBox(width: 12),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.5),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.photo_library_rounded,
-                              size: 14, color: Colors.white),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${_currentImageIndex + 1} / ${widget.memory.imageUrls.length}',
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                // Right group: Video button
-                if (widget.memory.hasVideo)
-                  GestureDetector(
-                    onTap: _showVideo,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: AppTheme.accent.withOpacity(0.9),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Row(
-                        children: [
-                          Icon(Icons.play_circle_filled,
-                              size: 14, color: Colors.white),
-                          SizedBox(width: 4),
-                          Text('Play Video',
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500)),
-                        ],
-                      ),
-                    ),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.5),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.photo_library_rounded,
+                      size: 14, color: Colors.white),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${_currentImageIndex + 1} / ${widget.memory.imageUrls.length}',
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500),
                   ),
-              ],
+                ],
+              ),
             ),
           ),
-          // Progress bar
+          // Video FAB button (Bottom Right)
+          if (hasVideo)
+            Positioned(
+              bottom: 20,
+              right: 16,
+              child: FloatingActionButton.small(
+                onPressed: _showVideo,
+                backgroundColor: AppTheme.accent,
+                elevation: 0,
+                child:
+                    const Icon(Icons.play_arrow, color: Colors.white, size: 24),
+              ),
+            ),
+          // Progress bar (Bottom edge)
           if (hasMultipleImages && _isAutoPlaying && !_isInitialDelay)
             Positioned(
               bottom: 0,
@@ -607,10 +535,10 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
                 key: ValueKey(_currentImageIndex),
               ),
             ),
-          // Thumbnail strip
+          // Thumbnail strip (Bottom Center)
           if (hasMultipleImages)
             Positioned(
-              bottom: 80,
+              bottom: 20,
               left: 100,
               right: 100,
               child: SizedBox(
@@ -1234,4 +1162,139 @@ class _StickyHeaderDelegate extends SliverPersistentHeaderDelegate {
   @override
   bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) =>
       true;
+}
+
+// ============================================
+// FULL SCREEN GALLERY WIDGET
+// ============================================
+
+class FullScreenGallery extends StatefulWidget {
+  final List<String> images;
+  final int initialIndex;
+  final VoidCallback onClose;
+
+  const FullScreenGallery({
+    super.key,
+    required this.images,
+    required this.initialIndex,
+    required this.onClose,
+  });
+
+  @override
+  State<FullScreenGallery> createState() => _FullScreenGalleryState();
+}
+
+class _FullScreenGalleryState extends State<FullScreenGallery> {
+  late PageController _pageController;
+  int _currentIndex = 0;
+  bool _showControls = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+    _pageController = PageController(initialPage: widget.initialIndex);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    super.dispose();
+  }
+
+  void _toggleControls() {
+    setState(() {
+      _showControls = !_showControls;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          PageView.builder(
+            controller: _pageController,
+            itemCount: widget.images.length,
+            onPageChanged: (index) {
+              setState(() => _currentIndex = index);
+            },
+            itemBuilder: (context, index) {
+              return GestureDetector(
+                onTap: _toggleControls,
+                child: Center(
+                  child: InteractiveViewer(
+                    panEnabled: true,
+                    scaleEnabled: true,
+                    minScale: 0.5,
+                    maxScale: 4.0,
+                    child: CachedNetworkImage(
+                      imageUrl: widget.images[index],
+                      fit: BoxFit.contain,
+                      placeholder: (_, __) => const Center(
+                          child:
+                              CircularProgressIndicator(color: Colors.white)),
+                      errorWidget: (_, __, ___) => const Center(
+                          child: Icon(Icons.broken_image,
+                              size: 50, color: Colors.white)),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+          // Close button
+          AnimatedOpacity(
+            opacity: _showControls ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 300),
+            child: Positioned(
+              top: 40,
+              right: 20,
+              child: GestureDetector(
+                onTap: () {
+                  widget.onClose();
+                  Navigator.pop(context);
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.5),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.close, color: Colors.white, size: 24),
+                ),
+              ),
+            ),
+          ),
+          // Index indicator
+          AnimatedOpacity(
+            opacity: _showControls ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 300),
+            child: Positioned(
+              bottom: 40,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '${_currentIndex + 1} / ${widget.images.length}',
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
