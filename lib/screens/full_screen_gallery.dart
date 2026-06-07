@@ -30,6 +30,8 @@ class _FullScreenGalleryState extends State<FullScreenGallery> {
   bool _showControls = true;
   bool _isLoading = false;
 
+  static const int _visibleThumbnails = 5;
+
   @override
   void initState() {
     super.initState();
@@ -54,6 +56,28 @@ class _FullScreenGalleryState extends State<FullScreenGallery> {
     });
   }
 
+  void _onPageChanged(int index) {
+    setState(() {
+      _currentIndex = index;
+    });
+  }
+
+  int get _startIndex {
+    final half = _visibleThumbnails ~/ 2;
+    int start = _currentIndex - half;
+    if (start < 0) start = 0;
+    if (start > widget.images.length - _visibleThumbnails) {
+      start = widget.images.length - _visibleThumbnails;
+    }
+    return start.clamp(0, widget.images.length - 1);
+  }
+
+  List<int> get _visibleIndices {
+    final end = (_startIndex + _visibleThumbnails - 1)
+        .clamp(0, widget.images.length - 1);
+    return List.generate(end - _startIndex + 1, (i) => _startIndex + i);
+  }
+
   void _goToPrevious() {
     if (_currentIndex > 0) {
       _pageController.previousPage(
@@ -70,6 +94,14 @@ class _FullScreenGalleryState extends State<FullScreenGallery> {
         curve: Curves.easeInOut,
       );
     }
+  }
+
+  void _jumpToPage(int index) {
+    _pageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
   }
 
   Future<void> _shareImage() async {
@@ -169,11 +201,7 @@ class _FullScreenGalleryState extends State<FullScreenGallery> {
           PageView.builder(
             controller: _pageController,
             itemCount: widget.images.length,
-            onPageChanged: (index) {
-              setState(() {
-                _currentIndex = index;
-              });
-            },
+            onPageChanged: _onPageChanged,
             itemBuilder: (context, index) {
               return GestureDetector(
                 onTap: _toggleControls,
@@ -286,7 +314,7 @@ class _FullScreenGalleryState extends State<FullScreenGallery> {
           // Bottom Controls Pill
           AnimatedPositioned(
             duration: const Duration(milliseconds: 300),
-            bottom: _showControls ? 20 : -80,
+            bottom: _showControls ? 100 : -80,
             left: 16,
             right: 16,
             child: Center(
@@ -326,7 +354,8 @@ class _FullScreenGalleryState extends State<FullScreenGallery> {
                         final isNearActive = (_currentIndex - index).abs() <= 2;
                         if (!isNearActive && widget.images.length > 5)
                           return const SizedBox.shrink();
-                        return Container(
+                        return AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
                           width: isActive ? 10 : 6,
                           height: isActive ? 10 : 6,
                           margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -373,15 +402,14 @@ class _FullScreenGalleryState extends State<FullScreenGallery> {
             ),
           ),
 
-          // Thumbnail Strip
+          // Centered Thumbnail Strip - Carousel Style
           AnimatedPositioned(
             duration: const Duration(milliseconds: 300),
-            bottom: _showControls ? 80 : -100,
+            bottom: _showControls ? 20 : -100,
             left: 0,
             right: 0,
             child: Container(
-              height: 70,
-              padding: const EdgeInsets.symmetric(vertical: 8),
+              height: 80,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.bottomCenter,
@@ -392,49 +420,60 @@ class _FullScreenGalleryState extends State<FullScreenGallery> {
                   ],
                 ),
               ),
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: widget.images.length,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemBuilder: (context, index) {
-                  final isActive = index == _currentIndex;
-                  return GestureDetector(
-                    onTap: () {
-                      _pageController.animateToPage(
-                        index,
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeInOut,
-                      );
-                    },
-                    child: Container(
-                      width: 60,
-                      height: 60,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                switchInCurve: Curves.easeInOutCubic,
+                switchOutCurve: Curves.easeInOutCubic,
+                child: Row(
+                  key: ValueKey(_startIndex),
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: _visibleIndices.map((index) {
+                    final isActive = index == _currentIndex;
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
                       margin: const EdgeInsets.symmetric(horizontal: 4),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: isActive
-                              ? AppTheme.memoryPrimary
-                              : Colors.white.withOpacity(0.3),
-                          width: isActive ? 2 : 1,
-                        ),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: CachedNetworkImage(
-                          imageUrl:
-                              _getOriginalQualityUrl(widget.images[index]),
-                          fit: BoxFit.cover,
-                          errorWidget: (_, __, ___) => Container(
-                            color: Colors.grey[800],
-                            child: const Icon(Icons.broken_image,
-                                size: 24, color: Colors.white54),
+                      width: isActive ? 66 : 60,
+                      height: isActive ? 66 : 60,
+                      child: GestureDetector(
+                        onTap: () => _jumpToPage(index),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: isActive
+                                  ? AppTheme.memoryPrimary
+                                  : Colors.white.withOpacity(0.3),
+                              width: isActive ? 2 : 1,
+                            ),
+                            boxShadow: isActive
+                                ? [
+                                    BoxShadow(
+                                      color: AppTheme.memoryPrimary
+                                          .withOpacity(0.3),
+                                      blurRadius: 8,
+                                      spreadRadius: 2,
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: CachedNetworkImage(
+                              imageUrl:
+                                  _getOriginalQualityUrl(widget.images[index]),
+                              fit: BoxFit.cover,
+                              errorWidget: (_, __, ___) => Container(
+                                color: Colors.grey[800],
+                                child: const Icon(Icons.broken_image,
+                                    size: 24, color: Colors.white54),
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  );
-                },
+                    );
+                  }).toList(),
+                ),
               ),
             ),
           ),
