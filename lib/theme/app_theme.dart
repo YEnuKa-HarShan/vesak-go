@@ -15,6 +15,10 @@ class AppTheme {
   static const Color glassSurface = Colors.white; // card fill base
   static const Color glassBorder = Color(0xFFFFFFFF); // border tint
 
+  // Add these colors
+  static const Color memoryPrimary = Color(0xFF8B5CF6); // Purple
+  static const Color memoryAccent = Color(0xFFEC4899); // Pink
+
   // Text
   static const Color textPrimary = Color(0xFF111827);
   static const Color textSecondary = Color(0xFF6B7280);

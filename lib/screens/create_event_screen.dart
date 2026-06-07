@@ -230,13 +230,6 @@ class _CreateEventScreenState extends State<CreateEventScreen>
     setState(() => _currentStep--);
   }
 
-  Future<void> _pickImage() async {
-    final file = await _cloudinaryService.pickImage();
-    if (file != null) {
-      setState(() => _selectedImage = file);
-    }
-  }
-
   Future<void> _handleSubmit() async {
     setState(() => _isLoading = true);
 
@@ -274,10 +267,12 @@ class _CreateEventScreenState extends State<CreateEventScreen>
     String imageUrl = _existingImageUrl ?? '';
     String imagePublicId = _existingImagePublicId ?? '';
 
-    // Upload new image to Cloudinary if selected
     if (_selectedImage != null) {
-      final uploadResult =
-          await _cloudinaryService.uploadImage(_selectedImage!);
+      final eventIdForUpload = _isEditMode
+          ? widget.editEvent!.id
+          : DateTime.now().millisecondsSinceEpoch.toString();
+      final uploadResult = await _cloudinaryService.uploadImage(
+          _selectedImage!, 'events/$eventIdForUpload');
       if (uploadResult != null) {
         imageUrl = _cloudinaryService.extractUrl(uploadResult);
         imagePublicId = _cloudinaryService.extractPublicId(uploadResult);
@@ -906,8 +901,6 @@ class _CreateEventScreenState extends State<CreateEventScreen>
   }
 
   Widget _buildStepPhotoReview() {
-    final hasImage = _selectedImage != null ||
-        (_existingImageUrl != null && _existingImageUrl!.isNotEmpty);
     final canPreview = _selectedCategory != null &&
         _titleController.text.isNotEmpty &&
         _selectedDate != null &&
@@ -925,7 +918,12 @@ class _CreateEventScreenState extends State<CreateEventScreen>
               child: Column(
                 children: [
                   GestureDetector(
-                    onTap: _pickImage,
+                    onTap: () async {
+                      final file = await _cloudinaryService.pickImage();
+                      if (file != null) {
+                        setState(() => _selectedImage = file);
+                      }
+                    },
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       width: 140,
@@ -934,8 +932,12 @@ class _CreateEventScreenState extends State<CreateEventScreen>
                         color: AppTheme.surface,
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color: hasImage ? AppTheme.accent : AppTheme.primary,
-                          width: hasImage ? 2 : 1,
+                          color: _selectedImage != null ||
+                                  (_existingImageUrl != null &&
+                                      _existingImageUrl!.isNotEmpty)
+                              ? AppTheme.accent
+                              : AppTheme.primary,
+                          width: 2,
                         ),
                         boxShadow: [
                           BoxShadow(
@@ -999,7 +1001,11 @@ class _CreateEventScreenState extends State<CreateEventScreen>
                                     ],
                                   ),
                                   child: Icon(
-                                    hasImage ? Icons.edit : Icons.add_a_photo,
+                                    _selectedImage != null ||
+                                            (_existingImageUrl != null &&
+                                                _existingImageUrl!.isNotEmpty)
+                                        ? Icons.edit
+                                        : Icons.add_a_photo,
                                     size: 20,
                                     color: AppTheme.primary,
                                   ),
@@ -1011,7 +1017,9 @@ class _CreateEventScreenState extends State<CreateEventScreen>
                       ),
                     ),
                   ),
-                  if (hasImage)
+                  if (_selectedImage != null ||
+                      (_existingImageUrl != null &&
+                          _existingImageUrl!.isNotEmpty))
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
                       child: TextButton(

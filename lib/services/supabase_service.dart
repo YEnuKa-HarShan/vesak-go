@@ -3,6 +3,7 @@ import 'package:crypto/crypto.dart';
 import 'dart:convert';
 import '../models/user_model.dart';
 import '../models/event_model.dart';
+import '../models/memory_model.dart';
 import '../constants.dart';
 
 class SupabaseService {
@@ -390,6 +391,23 @@ class SupabaseService {
       return response.length;
     } catch (e) {
       print('Get stories count error: $e');
+      return 0;
+    }
+  }
+
+  // ============================================
+  // MEMORY METHODS
+  // ============================================
+
+  Future<int> getMemoryCount(String userId) async {
+    try {
+      final response = await _supabase
+          .from('event_memories')
+          .select('id')
+          .eq('user_id', userId);
+      return response.length;
+    } catch (e) {
+      print('Get memory count error: $e');
       return 0;
     }
   }

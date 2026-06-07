@@ -5,13 +5,16 @@ import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/event_model.dart';
+import '../models/memory_model.dart';
 import '../services/supabase_service.dart';
 import '../services/session_service.dart';
+import '../services/memory_service.dart';
 import '../constants.dart';
 import '../theme/app_theme.dart';
+import 'create_memory_screen.dart';
 
 // ─────────────────────────────────────────────────────────────
-//  Glass helper  (matches HomeScreen / MemoriesScreen)
+//  Glass helper
 // ─────────────────────────────────────────────────────────────
 
 class _Glass extends StatelessWidget {
@@ -72,9 +75,11 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
     with SingleTickerProviderStateMixin {
   final SupabaseService _supabaseService = SupabaseService();
   final SessionService _sessionService = SessionService();
+  final MemoryService _memoryService = MemoryService();
 
   bool _isBookmarked = false;
   bool _isLoading = false;
+  bool _hasMemory = false;
 
   late AnimationController _fadeController;
 
@@ -87,6 +92,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
       duration: const Duration(milliseconds: 400),
     );
     _checkStatus();
+    _checkMemory();
   }
 
   @override
@@ -105,6 +111,17 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
 
     setState(() => _isBookmarked = bookmarked);
     _fadeController.forward(from: 0.0);
+  }
+
+  Future<void> _checkMemory() async {
+    if (!_sessionService.isLoggedIn) return;
+
+    final hasMemory = await _memoryService.hasMemory(
+      widget.event.id,
+      _sessionService.currentUser!.id,
+    );
+
+    setState(() => _hasMemory = hasMemory);
   }
 
   Future<void> _toggleBookmark() async {
@@ -142,19 +159,50 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
     setState(() => _isLoading = false);
   }
 
-  SnackBar _buildSnackBar(String message, IconData icon) {
-    return SnackBar(
-      content: Row(
-        children: [
-          Icon(icon, color: Colors.white, size: 16),
-          const SizedBox(width: 8),
-          Text(message),
-        ],
-      ),
-      backgroundColor: AppTheme.primary,
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-    );
+  Future<void> _handleMemoryAction() async {
+    if (!_sessionService.isLoggedIn) {
+      _showLoginRequired();
+      return;
+    }
+
+    if (_hasMemory) {
+      // Edit existing memory
+      final memory = await _memoryService.getMemoryByEvent(
+        widget.event.id,
+        _sessionService.currentUser!.id,
+      );
+      if (memory != null && mounted) {
+        final result = await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => CreateMemoryScreen(
+              event: widget.event,
+              isEditing: true,
+              existingMemoryId: memory.id,
+              existingNote: memory.experienceNote,
+              existingImageUrls: memory.imageUrls,
+              existingImagePublicIds: memory.imagePublicIds,
+              existingVideoUrl: memory.videoUrl,
+              existingVideoPublicId: memory.videoPublicId,
+            ),
+          ),
+        );
+        if (result == true) {
+          await _checkMemory();
+        }
+      }
+    } else {
+      // Create new memory
+      final result = await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CreateMemoryScreen(event: widget.event),
+        ),
+      );
+      if (result == true) {
+        await _checkMemory();
+      }
+    }
   }
 
   void _shareEvent() {
@@ -172,6 +220,21 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
   void _showLoginRequired() {
     ScaffoldMessenger.of(context).showSnackBar(
       _buildSnackBar('Please login to use this feature', Icons.lock_outline),
+    );
+  }
+
+  SnackBar _buildSnackBar(String message, IconData icon) {
+    return SnackBar(
+      content: Row(
+        children: [
+          Icon(icon, color: Colors.white, size: 16),
+          const SizedBox(width: 8),
+          Text(message),
+        ],
+      ),
+      backgroundColor: AppTheme.primary,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     );
   }
 
@@ -228,6 +291,8 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
                           _buildDescriptionCard(),
                         ],
                         const SizedBox(height: 16),
+                        _buildMemoryAction(),
+                        const SizedBox(height: 8),
                         _buildMetaCard(),
                         const SizedBox(height: 24),
                         if (_sessionService.isLoggedIn &&
@@ -660,6 +725,52 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  //  MEMORY ACTION BUTTON
+  // ─────────────────────────────────────────────
+
+  Widget _buildMemoryAction() {
+    return _Glass(
+      borderRadius: BorderRadius.circular(16),
+      blur: 12,
+      opacity: 0.90,
+      tint: _hasMemory ? AppTheme.memoryPrimary : AppTheme.memoryPrimary,
+      border: Border.all(
+        color: AppTheme.memoryPrimary.withOpacity(0.30),
+        width: 1,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: _handleMemoryAction,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  _hasMemory ? Icons.edit_note_rounded : Icons.memory_rounded,
+                  size: 18,
+                  color: Colors.white,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  _hasMemory ? 'Update Memory' : 'Add Memory',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
