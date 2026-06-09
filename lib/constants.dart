@@ -98,15 +98,127 @@ class AppConstants {
       'name': 'Lantern II',
       'minLevel': 2,
       'maxLevel': 2,
-      'icon': '🏮🏮',
-      'xpRequired': 283
+      'icon': '🏮',
+      'xpRequired': 250
     },
     {
       'name': 'Lantern I',
       'minLevel': 3,
-      'maxLevel': 999,
-      'icon': '🏮🏮🏮',
-      'xpRequired': 520
+      'maxLevel': 3,
+      'icon': '🏮',
+      'xpRequired': 500
+    },
+    {
+      'name': 'Glow III',
+      'minLevel': 4,
+      'maxLevel': 4,
+      'icon': '💡',
+      'xpRequired': 1000
+    },
+    {
+      'name': 'Glow II',
+      'minLevel': 5,
+      'maxLevel': 5,
+      'icon': '💡',
+      'xpRequired': 1750
+    },
+    {
+      'name': 'Glow I',
+      'minLevel': 6,
+      'maxLevel': 6,
+      'icon': '💡',
+      'xpRequired': 2750
+    },
+    {
+      'name': 'Radiance III',
+      'minLevel': 7,
+      'maxLevel': 7,
+      'icon': '✨',
+      'xpRequired': 4000
+    },
+    {
+      'name': 'Radiance II',
+      'minLevel': 8,
+      'maxLevel': 8,
+      'icon': '✨',
+      'xpRequired': 5500
+    },
+    {
+      'name': 'Radiance I',
+      'minLevel': 9,
+      'maxLevel': 9,
+      'icon': '✨',
+      'xpRequired': 7500
+    },
+    {
+      'name': 'Beacon III',
+      'minLevel': 10,
+      'maxLevel': 10,
+      'icon': '🔥',
+      'xpRequired': 10000
+    },
+    {
+      'name': 'Beacon II',
+      'minLevel': 11,
+      'maxLevel': 11,
+      'icon': '🔥',
+      'xpRequired': 13000
+    },
+    {
+      'name': 'Beacon I',
+      'minLevel': 12,
+      'maxLevel': 12,
+      'icon': '🔥',
+      'xpRequired': 17000
+    },
+    {
+      'name': 'Golden Beacon III',
+      'minLevel': 13,
+      'maxLevel': 13,
+      'icon': '🌟',
+      'xpRequired': 22000
+    },
+    {
+      'name': 'Golden Beacon II',
+      'minLevel': 14,
+      'maxLevel': 14,
+      'icon': '🌟',
+      'xpRequired': 28000
+    },
+    {
+      'name': 'Golden Beacon I',
+      'minLevel': 15,
+      'maxLevel': 15,
+      'icon': '🌟',
+      'xpRequired': 35000
+    },
+    {
+      'name': 'Sacred Beacon III',
+      'minLevel': 16,
+      'maxLevel': 16,
+      'icon': '🪷',
+      'xpRequired': 45000
+    },
+    {
+      'name': 'Sacred Beacon II',
+      'minLevel': 17,
+      'maxLevel': 17,
+      'icon': '🪷',
+      'xpRequired': 57000
+    },
+    {
+      'name': 'Sacred Beacon I',
+      'minLevel': 18,
+      'maxLevel': 18,
+      'icon': '🪷',
+      'xpRequired': 72000
+    },
+    {
+      'name': 'Guardian',
+      'minLevel': 19,
+      'maxLevel': 99,
+      'icon': '🛡️',
+      'xpRequired': 90000
     },
   ];
 
