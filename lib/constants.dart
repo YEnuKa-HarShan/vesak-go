@@ -15,6 +15,8 @@ class AppConstants {
       'http://192.168.43.214:3000/api/bookmarks';
   static const String apiBaseUrlMemories =
       'http://192.168.43.214:3000/api/memories';
+  static const String apiBaseUrlVisits =
+      'http://192.168.43.214:3000/api/visits';
 
   // ============================================
   // EVENT CATEGORIES

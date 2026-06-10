@@ -54,11 +54,11 @@ class _EventBottomSheetState extends State<EventBottomSheet> {
   }
 
   Future<void> _loadStats() async {
-    // Stats will be implemented when backend adds this endpoint
+    final stats = await ApiService.getEventStats(widget.event.id);
     setState(() {
-      _totalVisits = 0;
-      _totalMemories = 0;
-      _totalBookmarks = 0;
+      _totalVisits = stats['totalVisits'] ?? 0;
+      _totalMemories = stats['totalMemories'] ?? 0;
+      _totalBookmarks = stats['totalBookmarks'] ?? 0;
     });
   }
 
@@ -80,8 +80,9 @@ class _EventBottomSheetState extends State<EventBottomSheet> {
 
   Future<void> _checkVisited() async {
     if (!_sessionService.isLoggedIn) return;
-    // Will be implemented when backend adds visited check endpoint
-    setState(() => _hasVisited = false);
+
+    final result = await ApiService.hasUserVisitedEvent(widget.event.id);
+    setState(() => _hasVisited = result['hasVisited'] == true);
   }
 
   Future<void> _toggleBookmark() async {
@@ -123,13 +124,17 @@ class _EventBottomSheetState extends State<EventBottomSheet> {
 
     setState(() => _isMarkingVisited = true);
 
-    // Will be implemented when backend adds visited endpoint
-    setState(() {
-      _hasVisited = true;
-      _totalVisits++;
-      _isMarkingVisited = false;
-    });
-    _showSnackBar('Marked as visited! ✓', Icons.check_circle);
+    final success = await ApiService.markEventAsVisited(widget.event.id);
+
+    if (success) {
+      setState(() {
+        _hasVisited = true;
+        _totalVisits++;
+      });
+      _showSnackBar('Marked as visited! ✓', Icons.check_circle);
+    }
+
+    setState(() => _isMarkingVisited = false);
   }
 
   Future<void> _handleMemoryAction() async {

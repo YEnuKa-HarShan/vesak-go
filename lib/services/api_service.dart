@@ -8,6 +8,19 @@ import '../services/session_service.dart';
 
 class ApiService {
   // ============================================
+  // HELPER METHODS
+  // ============================================
+
+  // Get headers with user ID for authentication
+  static Map<String, String> _getHeaders() {
+    final sessionService = SessionService();
+    return {
+      'Content-Type': 'application/json',
+      'X-User-Id': sessionService.currentUser?.id ?? '',
+    };
+  }
+
+  // ============================================
   // AUTH ENDPOINTS
   // ============================================
 
@@ -331,18 +344,33 @@ class ApiService {
     }
   }
 
+  // Get event stats (visits, memories, bookmarks)
+  static Future<Map<String, int>> getEventStats(String eventId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${AppConstants.apiBaseUrlEvents}/stats/$eventId'),
+        headers: _getHeaders(),
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        return {
+          'totalVisits': data['data']['totalVisits'] ?? 0,
+          'totalMemories': data['data']['totalMemories'] ?? 0,
+          'totalBookmarks': data['data']['totalBookmarks'] ?? 0,
+        };
+      }
+      return {'totalVisits': 0, 'totalMemories': 0, 'totalBookmarks': 0};
+    } catch (e) {
+      print('Get event stats exception: $e');
+      return {'totalVisits': 0, 'totalMemories': 0, 'totalBookmarks': 0};
+    }
+  }
+
   // ============================================
   // BOOKMARK ENDPOINTS
   // ============================================
-
-  // Get headers with user ID
-  static Map<String, String> _getHeaders() {
-    final sessionService = SessionService();
-    return {
-      'Content-Type': 'application/json',
-      'X-User-Id': sessionService.currentUser?.id ?? '',
-    };
-  }
 
   // Add bookmark
   static Future<bool> addBookmark(String eventId) async {
@@ -427,26 +455,6 @@ class ApiService {
     } catch (e) {
       print('Get bookmarked events exception: $e');
       return [];
-    }
-  }
-
-  // Get bookmark count for event
-  static Future<int> getBookmarkCount(String eventId) async {
-    try {
-      final response = await http.get(
-        Uri.parse('${AppConstants.apiBaseUrlBookmarks}/count/$eventId'),
-        headers: _getHeaders(),
-      );
-
-      final data = jsonDecode(response.body);
-
-      if (response.statusCode == 200 && data['success'] == true) {
-        return data['data']['count'];
-      }
-      return 0;
-    } catch (e) {
-      print('Get bookmark count exception: $e');
-      return 0;
     }
   }
 
@@ -609,23 +617,75 @@ class ApiService {
     }
   }
 
-  // Get memory count for event
-  static Future<int> getMemoryCount(String eventId) async {
+  // ============================================
+  // EVENT VISIT ENDPOINTS
+  // ============================================
+
+  // Mark event as visited
+  static Future<bool> markEventAsVisited(String eventId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('${AppConstants.apiBaseUrlVisits}/'),
+        headers: _getHeaders(),
+        body: jsonEncode({'eventId': eventId}),
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 201 && data['success'] == true) {
+        return true;
+      } else {
+        print('Mark as visited error: ${data['error']}');
+        return false;
+      }
+    } catch (e) {
+      print('Mark as visited exception: $e');
+      return false;
+    }
+  }
+
+  // Check if user has visited event
+  static Future<Map<String, dynamic>> hasUserVisitedEvent(
+      String eventId) async {
     try {
       final response = await http.get(
-        Uri.parse('${AppConstants.apiBaseUrlMemories}/count/$eventId'),
+        Uri.parse('${AppConstants.apiBaseUrlVisits}/check/$eventId'),
         headers: _getHeaders(),
       );
 
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200 && data['success'] == true) {
-        return data['data']['count'];
+        return {
+          'hasVisited': data['data']['hasVisited'] == true,
+          'visitedAt': data['data']['visitedAt'],
+          'hasMemory': data['data']['hasMemory'] == true,
+        };
       }
-      return 0;
+      return {'hasVisited': false, 'visitedAt': null, 'hasMemory': false};
     } catch (e) {
-      print('Get memory count exception: $e');
-      return 0;
+      print('Check visited exception: $e');
+      return {'hasVisited': false, 'visitedAt': null, 'hasMemory': false};
+    }
+  }
+
+  // Get all visited events for user
+  static Future<List<Map<String, dynamic>>> getUserVisits() async {
+    try {
+      final response = await http.get(
+        Uri.parse('${AppConstants.apiBaseUrlVisits}/user'),
+        headers: _getHeaders(),
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        return List<Map<String, dynamic>>.from(data['data']);
+      }
+      return [];
+    } catch (e) {
+      print('Get user visits exception: $e');
+      return [];
     }
   }
 }

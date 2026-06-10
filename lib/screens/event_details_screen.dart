@@ -61,18 +61,19 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
   }
 
   Future<void> _loadStats() async {
-    // Stats will be implemented when backend adds this endpoint
+    final stats = await ApiService.getEventStats(widget.event.id);
     setState(() {
-      _totalVisits = 0;
-      _totalMemories = 0;
-      _totalBookmarks = 0;
+      _totalVisits = stats['totalVisits'] ?? 0;
+      _totalMemories = stats['totalMemories'] ?? 0;
+      _totalBookmarks = stats['totalBookmarks'] ?? 0;
     });
   }
 
   Future<void> _checkVisited() async {
     if (!_sessionService.isLoggedIn) return;
-    // Will be implemented when backend adds visited check endpoint
-    setState(() => _hasVisited = false);
+
+    final result = await ApiService.hasUserVisitedEvent(widget.event.id);
+    setState(() => _hasVisited = result['hasVisited'] == true);
   }
 
   Future<void> _checkStatus() async {
@@ -143,16 +144,19 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
 
     setState(() => _isMarkingVisited = true);
 
-    // Will be implemented when backend adds visited endpoint
-    setState(() {
-      _hasVisited = true;
-      _totalVisits++;
-      _isMarkingVisited = false;
-    });
+    final success = await ApiService.markEventAsVisited(widget.event.id);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Marked as visited! ✓')),
-    );
+    if (success) {
+      setState(() {
+        _hasVisited = true;
+        _totalVisits++;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Marked as visited! ✓')),
+      );
+    }
+
+    setState(() => _isMarkingVisited = false);
   }
 
   Future<void> _handleMemoryAction() async {
