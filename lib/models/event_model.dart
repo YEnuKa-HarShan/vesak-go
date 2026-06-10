@@ -62,26 +62,43 @@ class EventModel {
   }
 
   factory EventModel.fromJson(Map<String, dynamic> json) {
+    // Handle both camelCase (backend) and snake_case (legacy)
+    String createdByName = '';
+    if (json['createdBy'] != null) {
+      createdByName = json['createdBy'].toString();
+    } else if (json['created_by'] != null) {
+      createdByName = json['created_by'].toString();
+    } else {
+      createdByName = 'Unknown Organizer';
+    }
+
     return EventModel(
-      id: json['id'] ?? '',
-      category: json['category'] ?? '',
-      title: json['title'] ?? '',
-      description: json['description'],
-      date: json['date'] ?? '',
-      time: json['time'] ?? '',
-      location: json['location'] ?? '',
-      userId: json['user_id'] ?? '',
-      createdBy: json['created_by'] ?? '',
-      createdAt: json['created_at'] != null
-          ? DateTime.parse(json['created_at'])
-          : DateTime.now(),
+      id: json['id']?.toString() ?? '',
+      category: json['category']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      description: json['description']?.toString(),
+      date: json['date']?.toString() ?? '',
+      time: json['time']?.toString() ?? '',
+      location: json['location']?.toString() ?? '',
+      userId: json['userId']?.toString() ?? json['user_id']?.toString() ?? '',
+      createdBy: createdByName,
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'].toString())
+          : (json['created_at'] != null
+              ? DateTime.parse(json['created_at'].toString())
+              : DateTime.now()),
       latitude: (json['latitude'] as num?)?.toDouble() ?? 0.0,
       longitude: (json['longitude'] as num?)?.toDouble() ?? 0.0,
-      foodType: json['food_type'] ?? 'none',
-      imageUrl: json['image_url'] ?? '',
-      imagePublicId: json['image_public_id'] ?? '',
-      district: json['district'],
-      province: json['province'],
+      foodType: json['foodType']?.toString() ??
+          json['food_type']?.toString() ??
+          'none',
+      imageUrl:
+          json['imageUrl']?.toString() ?? json['image_url']?.toString() ?? '',
+      imagePublicId: json['imagePublicId']?.toString() ??
+          json['image_public_id']?.toString() ??
+          '',
+      district: json['district']?.toString(),
+      province: json['province']?.toString(),
     );
   }
 

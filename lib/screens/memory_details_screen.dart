@@ -9,7 +9,7 @@ import '../models/memory_model.dart';
 import '../models/event_model.dart';
 import '../services/memory_service.dart';
 import '../services/session_service.dart';
-import '../services/cloudinary_service.dart';
+import '../services/upload_service.dart';
 import '../constants.dart';
 import '../theme/app_theme.dart';
 import 'create_memory_screen.dart';
@@ -74,7 +74,7 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
     with SingleTickerProviderStateMixin {
   final MemoryService _memoryService = MemoryService();
   final SessionService _sessionService = SessionService();
-  final CloudinaryService _cloudinaryService = CloudinaryService();
+  final UploadService _cloudinaryService = UploadService();
 
   late AnimationController _fadeController;
   bool _isLoading = false;
@@ -203,11 +203,14 @@ class _MemoryDetailsScreenState extends State<MemoryDetailsScreen>
     if (confirm == true && mounted) {
       setState(() => _isLoading = true);
 
+      // Delete images from Cloudinary
+      final userId = _sessionService.currentUser?.id ?? '';
       for (final publicId in widget.memory.imagePublicIds) {
-        await _cloudinaryService.deleteFile(publicId);
+        await _cloudinaryService.deleteFile(publicId, userId);
       }
       if (widget.memory.videoPublicId.isNotEmpty) {
-        await _cloudinaryService.deleteFile(widget.memory.videoPublicId);
+        await _cloudinaryService.deleteFile(
+            widget.memory.videoPublicId, userId);
       }
 
       final success = await _memoryService.deleteMemory(widget.memory.id);

@@ -7,7 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import '../constants.dart';
 import '../models/event_model.dart';
 import '../services/memory_service.dart';
-import '../services/cloudinary_service.dart';
+import '../services/upload_service.dart';
 import '../services/session_service.dart';
 import '../services/api_service.dart';
 import '../widgets/media_picker_grid.dart';
@@ -41,7 +41,7 @@ class CreateMemoryScreen extends StatefulWidget {
 
 class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
   final MemoryService _memoryService = MemoryService();
-  final CloudinaryService _cloudinaryService = CloudinaryService();
+  final UploadService _cloudinaryService = UploadService();
   final SessionService _sessionService = SessionService();
 
   final TextEditingController _noteController = TextEditingController();
@@ -226,19 +226,22 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
     _cloudinaryService.onProgress = (progress, status) {
       setState(() {
         _uploadStatus = status;
+        if (totalFiles > 0 && progress > 0) {
+          _overallProgress = (completedFiles + progress) / totalFiles;
+        }
       });
     };
 
     final userId = _sessionService.currentUser!.id;
 
-    // Upload images with signed signature
+    // Upload images with server-side method
     for (int i = 0; i < _selectedImages.length; i++) {
       setState(() {
         _uploadStatus = 'Uploading image ${i + 1}/${_selectedImages.length}...';
-        _imageUploadProgress[i] = 0.2;
+        _imageUploadProgress[i] = 0.3;
       });
 
-      final result = await _cloudinaryService.uploadImageWithSignature(
+      final result = await _cloudinaryService.uploadImage(
         imageFile: _selectedImages[i],
         userId: userId,
         type: 'memory',
@@ -246,8 +249,8 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
       );
 
       if (result != null) {
-        finalImageUrls.add(_cloudinaryService.extractUrl(result));
-        finalImagePublicIds.add(_cloudinaryService.extractPublicId(result));
+        finalImageUrls.add(result['url']!);
+        finalImagePublicIds.add(result['publicId']!);
         setState(() {
           _imageUploadProgress[i] = 1.0;
         });

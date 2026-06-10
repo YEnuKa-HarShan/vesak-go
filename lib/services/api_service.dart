@@ -644,6 +644,28 @@ class ApiService {
     }
   }
 
+  // Unmark event as visited (remove visit record)
+  static Future<bool> unmarkEventAsVisited(String eventId) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('${AppConstants.apiBaseUrlVisits}/$eventId'),
+        headers: _getHeaders(),
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        return true;
+      } else {
+        print('Unmark as visited error: ${data['error']}');
+        return false;
+      }
+    } catch (e) {
+      print('Unmark as visited exception: $e');
+      return false;
+    }
+  }
+
   // Check if user has visited event
   static Future<Map<String, dynamic>> hasUserVisitedEvent(
       String eventId) async {

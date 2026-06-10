@@ -10,6 +10,7 @@ import '../models/memory_model.dart';
 import '../services/api_service.dart';
 import '../services/session_service.dart';
 import '../services/memory_service.dart';
+import '../services/upload_service.dart';
 import '../constants.dart';
 import '../theme/app_theme.dart';
 import 'create_memory_screen.dart';
@@ -28,12 +29,14 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
     with SingleTickerProviderStateMixin {
   final SessionService _sessionService = SessionService();
   final MemoryService _memoryService = MemoryService();
+  final UploadService _uploadService = UploadService();
 
   bool _isBookmarked = false;
   bool _isLoading = false;
   bool _hasMemory = false;
   bool _hasVisited = false;
   bool _isMarkingVisited = false;
+  bool _isUnmarkingVisited = false;
   int _totalVisits = 0;
   int _totalMemories = 0;
   int _totalBookmarks = 0;
@@ -52,6 +55,14 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
     _checkMemory();
     _checkVisited();
     _loadStats();
+
+    // Debug prints
+    print('🔍 ===== EVENT DETAILS DEBUG =====');
+    print('📱 User logged in: ${_sessionService.isLoggedIn}');
+    print('👤 Current user ID: ${_sessionService.currentUser?.id}');
+    print('📋 Event user ID: ${widget.event.userId}');
+    print(
+        '👑 Is owner: ${_sessionService.isLoggedIn && widget.event.userId == _sessionService.currentUser?.id}');
   }
 
   @override
@@ -73,6 +84,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
     if (!_sessionService.isLoggedIn) return;
 
     final result = await ApiService.hasUserVisitedEvent(widget.event.id);
+    print('👣 Visited check result: ${result['hasVisited']}');
     setState(() => _hasVisited = result['hasVisited'] == true);
   }
 
@@ -80,7 +92,6 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
     if (!_sessionService.isLoggedIn) return;
 
     final bookmarked = await ApiService.isBookmarked(widget.event.id);
-
     setState(() => _isBookmarked = bookmarked);
     _fadeController.forward(from: 0.0);
   }
@@ -93,6 +104,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
       _sessionService.currentUser!.id,
     );
 
+    print('📝 Memory check result: $hasMemory');
     setState(() => _hasMemory = hasMemory);
   }
 
@@ -159,13 +171,36 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
     setState(() => _isMarkingVisited = false);
   }
 
+  Future<void> _unmarkAsVisited() async {
+    if (!_sessionService.isLoggedIn) return;
+    if (!_hasVisited) return;
+
+    setState(() => _isUnmarkingVisited = true);
+
+    final success = await ApiService.unmarkEventAsVisited(widget.event.id);
+
+    if (success) {
+      setState(() {
+        _hasVisited = false;
+        _totalVisits--;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Removed from visited list')),
+      );
+    }
+
+    setState(() => _isUnmarkingVisited = false);
+  }
+
   Future<void> _handleMemoryAction() async {
     if (!_sessionService.isLoggedIn) {
       _showLoginRequired();
       return;
     }
 
+    // Always allow adding/editing memory regardless of _hasMemory
     if (_hasMemory) {
+      // Edit existing memory
       final memory = await _memoryService.getMemoryByEvent(
         widget.event.id,
         _sessionService.currentUser!.id,
@@ -193,6 +228,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
         }
       }
     } else {
+      // Create new memory
       final result = await Navigator.push(
         context,
         MaterialPageRoute(
@@ -241,8 +277,32 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
   }
 
   void _showLoginRequired() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      _buildSnackBar('Please login to use this feature', Icons.lock_outline),
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Login Required'),
+        content: const Text(
+          'Create an account or login to add memories and mark events as visited.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Maybe Later'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pushNamed(context, '/login');
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primary,
+            ),
+            child: const Text('Login / Register'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -296,6 +356,8 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
   bool get _isOwner =>
       _sessionService.isLoggedIn &&
       widget.event.userId == _sessionService.currentUser?.id;
+
+  bool get _showActionButtons => _sessionService.isLoggedIn && !_isOwner;
 
   Future<void> _editEvent() async {
     final result = await Navigator.push(
@@ -380,12 +442,16 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
                         const SizedBox(height: 16),
                         _buildCreatorCard(),
                         const SizedBox(height: 24),
-                        if (!_isOwner) _buildMarkAsVisitedButton(),
-                        if (!_isOwner) const SizedBox(height: 8),
-                        if (!_isOwner) _buildMemoryActionButton(),
-                        if (_isOwner) const SizedBox(height: 8),
-                        if (_isOwner) _buildOwnerActions(),
-                        const SizedBox(height: 12),
+                        if (_showActionButtons) ...[
+                          _buildMarkAsVisitedButton(),
+                          const SizedBox(height: 12),
+                          _buildMemoryActionButton(),
+                          const SizedBox(height: 12),
+                        ],
+                        if (_isOwner) ...[
+                          _buildOwnerActions(),
+                          const SizedBox(height: 12),
+                        ],
                         _buildCloseButton(),
                         const SizedBox(height: 20),
                       ],
@@ -940,6 +1006,10 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
   }
 
   Widget _buildCreatorCard() {
+    final creatorName = widget.event.createdBy.isNotEmpty
+        ? widget.event.createdBy
+        : 'Unknown Organizer';
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -963,12 +1033,12 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Created by',
+                const Text('Organized by',
                     style:
                         TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
                 const SizedBox(height: 2),
                 Text(
-                  widget.event.createdBy,
+                  creatorName,
                   style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -983,8 +1053,59 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
   }
 
   Widget _buildMarkAsVisitedButton() {
+    // Only show for logged-in non-owners
     if (!_sessionService.isLoggedIn) return const SizedBox.shrink();
-    if (_hasVisited || _hasMemory) return const SizedBox.shrink();
+    if (_isOwner) return const SizedBox.shrink();
+
+    if (_hasVisited) {
+      // Show visited badge with option to remove
+      return GestureDetector(
+        onTap: _isUnmarkingVisited ? null : _unmarkAsVisited,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: AppTheme.success.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppTheme.success.withOpacity(0.3)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (_isUnmarkingVisited)
+                const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else ...[
+                const Icon(Icons.check_circle,
+                    color: AppTheme.success, size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  'You visited this event',
+                  style: TextStyle(
+                      color: AppTheme.success, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppTheme.error.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Text(
+                    'Undo',
+                    style: TextStyle(color: AppTheme.error, fontSize: 12),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
 
     return SizedBox(
       width: double.infinity,
@@ -1009,6 +1130,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
   }
 
   Widget _buildMemoryActionButton() {
+    // Only show for logged-in non-owners
     if (!_sessionService.isLoggedIn) return const SizedBox.shrink();
     if (_isOwner) return const SizedBox.shrink();
 

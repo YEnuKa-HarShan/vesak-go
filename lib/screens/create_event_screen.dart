@@ -7,7 +7,7 @@ import 'package:geolocator/geolocator.dart';
 import '../services/api_service.dart';
 import '../services/location_service.dart';
 import '../services/session_service.dart';
-import '../services/cloudinary_service.dart';
+import '../services/upload_service.dart';
 import '../models/event_model.dart';
 import '../constants.dart';
 import '../theme/app_theme.dart';
@@ -73,7 +73,7 @@ class _CreateEventScreenState extends State<CreateEventScreen>
     with SingleTickerProviderStateMixin {
   final LocationService _locationService = LocationService();
   final SessionService _sessionService = SessionService();
-  final CloudinaryService _cloudinaryService = CloudinaryService();
+  final UploadService _cloudinaryService = UploadService();
 
   String? _selectedCategory;
   String? _selectedFoodType;
@@ -90,6 +90,8 @@ class _CreateEventScreenState extends State<CreateEventScreen>
   bool _isGettingLocation = false;
   bool _isEditMode = false;
   int _currentStep = 0;
+  bool _isUploadingImage = false;
+  String _uploadStatus = '';
 
   late AnimationController _fadeController;
   static const int _totalSteps = 3;
@@ -266,20 +268,38 @@ class _CreateEventScreenState extends State<CreateEventScreen>
     String imageUrl = _existingImageUrl ?? '';
     String imagePublicId = _existingImagePublicId ?? '';
 
+    // Upload image using new server-side method
     if (_selectedImage != null) {
+      setState(() {
+        _isUploadingImage = true;
+        _uploadStatus = 'Starting upload...';
+      });
+
       _cloudinaryService.onProgress = (progress, status) {
-        print('Upload progress: $progress - $status');
+        print('Upload progress: ${(progress * 100).toInt()}% - $status');
+        setState(() {
+          _uploadStatus = status;
+        });
       };
 
-      final uploadResult = await _cloudinaryService.uploadImageWithSignature(
+      final uploadResult = await _cloudinaryService.uploadImage(
         imageFile: _selectedImage!,
         userId: widget.userId,
         type: 'event',
-        eventId: _isEditMode ? widget.editEvent!.id : '',
+        eventId: _isEditMode ? widget.editEvent!.id : null,
       );
+
+      setState(() {
+        _isUploadingImage = false;
+      });
+
       if (uploadResult != null) {
-        imageUrl = _cloudinaryService.extractUrl(uploadResult);
-        imagePublicId = _cloudinaryService.extractPublicId(uploadResult);
+        imageUrl = uploadResult['url']!;
+        imagePublicId = uploadResult['publicId']!;
+        print('✅ Image uploaded successfully: $imageUrl');
+      } else {
+        _showSnack('Image upload failed, but event will be saved',
+            Icons.warning_rounded);
       }
     }
 
@@ -400,7 +420,42 @@ class _CreateEventScreenState extends State<CreateEventScreen>
               ],
             ),
           ),
+          if (_isUploadingImage) _buildUploadOverlay(),
         ],
+      ),
+    );
+  }
+
+  Widget _buildUploadOverlay() {
+    return Container(
+      color: Colors.black.withOpacity(0.7),
+      child: Center(
+        child: _Glass(
+          borderRadius: BorderRadius.circular(24),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(
+                width: 50,
+                height: 50,
+                child: CircularProgressIndicator(
+                  strokeWidth: 3,
+                  color: AppTheme.primary,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                _uploadStatus,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1241,7 +1296,7 @@ class _CreateEventScreenState extends State<CreateEventScreen>
                     color: Colors.transparent,
                     child: InkWell(
                       borderRadius: BorderRadius.circular(16),
-                      onTap: _isLoading
+                      onTap: _isLoading || _isUploadingImage
                           ? null
                           : (_currentStep == _totalSteps - 1
                               ? _handleSubmit
@@ -1249,7 +1304,7 @@ class _CreateEventScreenState extends State<CreateEventScreen>
                       child: Padding(
                         padding: const EdgeInsets.symmetric(vertical: 15),
                         child: Center(
-                          child: _isLoading
+                          child: _isLoading || _isUploadingImage
                               ? const SizedBox(
                                   width: 20,
                                   height: 20,
