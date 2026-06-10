@@ -1,38 +1,46 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/memory_model.dart';
 import '../models/event_model.dart';
+import 'api_service.dart';
+import 'session_service.dart';
 
 class MemoryService {
-  final SupabaseClient _supabase = Supabase.instance.client;
+  final SessionService _sessionService = SessionService();
 
   Future<bool> hasMemory(String eventId, String userId) async {
     try {
-      final response = await _supabase
-          .from('event_memories')
-          .select('id')
-          .eq('event_id', eventId)
-          .eq('user_id', userId)
-          .maybeSingle();
-      return response != null;
+      // Use userId from session if not provided
+      final effectiveUserId =
+          userId.isNotEmpty ? userId : _sessionService.currentUser?.id ?? '';
+      if (effectiveUserId.isEmpty) return false;
+
+      return await ApiService.hasMemory(eventId);
     } catch (e) {
+      print('Has memory error: $e');
       return false;
     }
   }
 
   Future<MemoryModel?> getMemoryByEvent(String eventId, String userId) async {
     try {
-      final response = await _supabase
-          .from('event_memories')
-          .select('*')
-          .eq('event_id', eventId)
-          .eq('user_id', userId)
-          .maybeSingle();
+      final memoryData = await ApiService.getMemoryByEvent(eventId);
 
-      if (response != null) {
-        return MemoryModel.fromJson(response);
-      }
-      return null;
+      if (memoryData == null) return null;
+
+      return MemoryModel(
+        id: memoryData['id'],
+        eventId: memoryData['eventId'],
+        userId: memoryData['userId'],
+        experienceNote: memoryData['experienceNote'],
+        visitedAt: DateTime.parse(memoryData['visitedAt']),
+        createdAt: DateTime.parse(memoryData['createdAt']),
+        updatedAt: DateTime.parse(memoryData['updatedAt']),
+        imageUrls: List<String>.from(memoryData['imageUrls']),
+        imagePublicIds: List<String>.from(memoryData['imagePublicIds']),
+        videoUrl: memoryData['videoUrl'] ?? '',
+        videoPublicId: memoryData['videoPublicId'] ?? '',
+      );
     } catch (e) {
+      print('Get memory by event error: $e');
       return null;
     }
   }
@@ -47,39 +55,16 @@ class MemoryService {
     required String videoPublicId,
   }) async {
     try {
-      final newMemory = {
-        'event_id': eventId,
-        'user_id': userId,
-        'experience_note': experienceNote,
-        'visited_at': DateTime.now().toIso8601String(),
-        'created_at': DateTime.now().toIso8601String(),
-        'updated_at': DateTime.now().toIso8601String(),
-        'image_urls': imageUrls,
-        'image_public_ids': imagePublicIds,
-        'video_url': videoUrl,
-        'video_public_id': videoPublicId,
-      };
+      final result = await ApiService.createMemory(
+        eventId: eventId,
+        experienceNote: experienceNote,
+        imageUrls: imageUrls,
+        imagePublicIds: imagePublicIds,
+        videoUrl: videoUrl,
+        videoPublicId: videoPublicId,
+      );
 
-      await _supabase.from('event_memories').insert(newMemory);
-
-      // Also add to event_visits if not exists
-      final existingVisit = await _supabase
-          .from('event_visits')
-          .select()
-          .eq('user_id', userId)
-          .eq('event_id', eventId)
-          .maybeSingle();
-
-      if (existingVisit == null) {
-        await _supabase.from('event_visits').insert({
-          'user_id': userId,
-          'event_id': eventId,
-          'visited_at': DateTime.now().toIso8601String(),
-          'has_memory': true,
-        });
-      }
-
-      return true;
+      return result != null;
     } catch (e) {
       print('Create memory error: $e');
       return false;
@@ -95,20 +80,14 @@ class MemoryService {
     required String videoPublicId,
   }) async {
     try {
-      final updatedMemory = {
-        'experience_note': experienceNote,
-        'updated_at': DateTime.now().toIso8601String(),
-        'image_urls': imageUrls,
-        'image_public_ids': imagePublicIds,
-        'video_url': videoUrl,
-        'video_public_id': videoPublicId,
-      };
-
-      await _supabase
-          .from('event_memories')
-          .update(updatedMemory)
-          .eq('id', memoryId);
-      return true;
+      return await ApiService.updateMemory(
+        memoryId: memoryId,
+        experienceNote: experienceNote,
+        imageUrls: imageUrls,
+        imagePublicIds: imagePublicIds,
+        videoUrl: videoUrl,
+        videoPublicId: videoPublicId,
+      );
     } catch (e) {
       print('Update memory error: $e');
       return false;
@@ -117,8 +96,7 @@ class MemoryService {
 
   Future<bool> deleteMemory(String memoryId) async {
     try {
-      await _supabase.from('event_memories').delete().eq('id', memoryId);
-      return true;
+      return await ApiService.deleteMemory(memoryId);
     } catch (e) {
       print('Delete memory error: $e');
       return false;
@@ -128,24 +106,59 @@ class MemoryService {
   Future<Map<String, List<MemoryWithEvent>>> getUserMemories(
       String userId) async {
     try {
-      final response = await _supabase
-          .from('event_memories')
-          .select('*, events(*)')
-          .eq('user_id', userId)
-          .order('created_at', ascending: false);
+      final memoriesData = await ApiService.getUserMemories();
 
       final Map<String, List<MemoryWithEvent>> grouped = {};
 
-      for (var json in response) {
-        final memory = MemoryModel.fromJson(json);
-        final event = EventModel.fromJson(json['events']);
+      for (var item in memoriesData) {
+        final memoryData = item['memory'];
+        final eventData = item['event'];
+
+        final memory = MemoryModel(
+          id: memoryData['id'],
+          eventId: memoryData['eventId'],
+          userId: memoryData['userId'],
+          experienceNote: memoryData['experienceNote'],
+          visitedAt: DateTime.parse(memoryData['visitedAt']),
+          createdAt: DateTime.parse(memoryData['createdAt']),
+          updatedAt: DateTime.parse(memoryData['updatedAt']),
+          imageUrls: List<String>.from(memoryData['imageUrls']),
+          imagePublicIds: List<String>.from(memoryData['imagePublicIds']),
+          videoUrl: memoryData['videoUrl'] ?? '',
+          videoPublicId: memoryData['videoPublicId'] ?? '',
+        );
+
+        final event = EventModel(
+          id: eventData['id'],
+          category: eventData['category'],
+          title: eventData['title'],
+          description: eventData['description'],
+          date: eventData['date'],
+          time: eventData['time'],
+          location: eventData['location'],
+          userId: eventData['userId'],
+          createdBy: eventData['createdBy'],
+          createdAt: DateTime.parse(eventData['createdAt']),
+          latitude: eventData['latitude'],
+          longitude: eventData['longitude'],
+          foodType: eventData['foodType'],
+          imageUrl: eventData['imageUrl'] ?? '',
+          imagePublicId: eventData['imagePublicId'] ?? '',
+          district: eventData['district'],
+          province: eventData['province'],
+        );
+
         final year = memory.createdAt.year.toString();
 
         grouped.putIfAbsent(year, () => []);
         grouped[year]!.add(MemoryWithEvent(memory: memory, event: event));
       }
 
-      return grouped;
+      // Sort years in descending order
+      final sortedGrouped = Map.fromEntries(
+          grouped.entries.toList()..sort((a, b) => b.key.compareTo(a.key)));
+
+      return sortedGrouped;
     } catch (e) {
       print('Get user memories error: $e');
       return {};

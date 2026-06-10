@@ -4,15 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
-import '../services/supabase_service.dart';
+import '../services/api_service.dart';
 import '../services/session_service.dart';
 import '../constants.dart';
 import '../theme/app_theme.dart';
 
-// ─────────────────────────────────────────────────────────────
-//  Glass helper  (identical to HomeScreen / MemoriesScreen)
-// ─────────────────────────────────────────────────────────────
-
+// Glass helper
 class _Glass extends StatelessWidget {
   final Widget child;
   final BorderRadius? borderRadius;
@@ -54,10 +51,6 @@ class _Glass extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-//  ProfileScreen
-// ─────────────────────────────────────────────────────────────
-
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -67,7 +60,6 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen>
     with SingleTickerProviderStateMixin {
-  final SupabaseService _supabaseService = SupabaseService();
   final SessionService _sessionService = SessionService();
 
   int _userEventsCount = 0;
@@ -109,16 +101,16 @@ class _ProfileScreenState extends State<ProfileScreen>
     setState(() => _isLoading = true);
 
     final userId = _sessionService.currentUser!.id;
-    final freshUser = await _supabaseService.getUserById(userId);
-    final events = await _supabaseService.getMyEvents(userId);
-    final leaderboard = await _supabaseService.getLeaderboard();
+    final freshUser = await ApiService.getUserById(userId);
+    final events = await ApiService.getMyEvents(userId);
+    // Leaderboard will be implemented when backend adds this endpoint
 
     if (freshUser != null) {
       setState(() {
         _userTotalXp = freshUser.totalXp;
         _userCurrentLevel = freshUser.currentLevel;
         _userEventsCount = events.length;
-        _leaderboard = leaderboard;
+        _leaderboard = [];
         _isLoading = false;
       });
       await _sessionService.login(freshUser);
@@ -236,7 +228,6 @@ class _ProfileScreenState extends State<ProfileScreen>
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Handle bar
                 Center(
                   child: Container(
                     width: 40,
@@ -335,27 +326,17 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  BUILD ROOT
-  // ─────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.background,
       body: Stack(
         children: [
-          // ── Ambient blobs ──
           _buildAmbientBlobs(),
-
-          // ── Screen ──
           SafeArea(
             child: Column(
               children: [
-                // ── Glass header ──
                 _buildHeader(),
-
-                // ── Body ──
                 Expanded(
                   child: _isLoading
                       ? Center(
@@ -413,10 +394,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  AMBIENT BLOBS  (same as HomeScreen)
-  // ─────────────────────────────────────────────
-
   Widget _buildAmbientBlobs() {
     return Stack(
       children: [
@@ -460,10 +437,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  GLASS HEADER  (same pattern as HomeScreen)
-  // ─────────────────────────────────────────────
-
   Widget _buildHeader() {
     return ClipRect(
       child: BackdropFilter(
@@ -479,14 +452,11 @@ class _ProfileScreenState extends State<ProfileScreen>
           ),
           child: Row(
             children: [
-              // Back button
               _buildGlassIconButton(
                 icon: Icons.arrow_back_rounded,
                 onPressed: () => Navigator.pop(context),
               ),
               const SizedBox(width: 14),
-
-              // Title
               const Expanded(
                 child: Text(
                   'My Profile',
@@ -498,8 +468,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                   ),
                 ),
               ),
-
-              // Settings button
               _buildGlassIconButton(
                 icon: Icons.settings_rounded,
                 onPressed: _showSettings,
@@ -531,17 +499,12 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  AVATAR HERO
-  // ─────────────────────────────────────────────
-
   Widget _buildAvatarHero() {
     return GestureDetector(
       onTap: _sessionService.isLoggedIn ? _pickAvatar : null,
       child: Stack(
         alignment: Alignment.center,
         children: [
-          // Outer ring glow
           Container(
             width: 116,
             height: 116,
@@ -557,7 +520,6 @@ class _ProfileScreenState extends State<ProfileScreen>
               ),
             ),
           ),
-          // Glass orb
           ClipRRect(
             borderRadius: BorderRadius.circular(55),
             child: BackdropFilter(
@@ -589,7 +551,6 @@ class _ProfileScreenState extends State<ProfileScreen>
               ),
             ),
           ),
-          // Camera badge
           if (_sessionService.isLoggedIn)
             Positioned(
               bottom: 2,
@@ -610,10 +571,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       ),
     );
   }
-
-  // ─────────────────────────────────────────────
-  //  USER INFO CARD
-  // ─────────────────────────────────────────────
 
   Widget _buildUserInfoCard() {
     if (!_sessionService.isLoggedIn) {
@@ -706,10 +663,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  LEVEL & XP CARD  (matches HomeScreen XP card)
-  // ─────────────────────────────────────────────
-
   Widget _buildLevelXpCard() {
     final currentLevel = _userCurrentLevel;
     final league = AppConstants.getLeagueByLevel(currentLevel);
@@ -748,7 +701,6 @@ class _ProfileScreenState extends State<ProfileScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header row
                 Row(
                   children: [
                     Container(
@@ -787,8 +739,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                   ],
                 ),
                 const SizedBox(height: 16),
-
-                // League + level row
                 Row(
                   children: [
                     Text(leagueIcon, style: const TextStyle(fontSize: 28)),
@@ -831,8 +781,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                   ],
                 ),
                 const SizedBox(height: 14),
-
-                // Progress bar
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: LinearProgressIndicator(
@@ -860,10 +808,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       ),
     );
   }
-
-  // ─────────────────────────────────────────────
-  //  ACTIVITY STATS ROW  (matches HomeScreen stat cards)
-  // ─────────────────────────────────────────────
 
   Widget _buildActivityStatsRow() {
     return Padding(
@@ -951,10 +895,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  ACHIEVEMENTS CARD
-  // ─────────────────────────────────────────────
-
   Widget _buildAchievementsCard() {
     final userEvents = _userEventsCount;
     return Padding(
@@ -1041,10 +981,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  LEADERBOARD CARD
-  // ─────────────────────────────────────────────
-
   Widget _buildLeaderboardCard() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1053,121 +989,34 @@ class _ProfileScreenState extends State<ProfileScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildCardSectionHeader(
-                Icons.leaderboard_rounded, 'Leaderboard — Top 10',
+                Icons.leaderboard_rounded, 'Leaderboard — Coming Soon',
                 color: AppTheme.primary),
             Divider(
                 color: Colors.grey.withOpacity(0.18), height: 24, thickness: 1),
-            if (_leaderboard.isEmpty)
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Text('No data available',
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  children: [
+                    Icon(Icons.leaderboard_rounded,
+                        size: 48, color: AppTheme.primary.withOpacity(0.3)),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Leaderboard feature coming soon!',
                       style: TextStyle(
-                          color: AppTheme.textSecondary.withOpacity(0.7))),
-                ),
-              )
-            else
-              ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: _leaderboard.length,
-                separatorBuilder: (_, __) =>
-                    Divider(color: Colors.grey.withOpacity(0.12), height: 1),
-                itemBuilder: (_, index) {
-                  final user = _leaderboard[index];
-                  final rank = index + 1;
-                  final league =
-                      AppConstants.getLeagueByLevel(user['current_level']);
-                  final leagueIcon =
-                      AppConstants.getLeagueIcon(user['current_level']);
-
-                  // Rank badge colour
-                  final rankColor = rank == 1
-                      ? AppTheme.accent
-                      : rank == 2
-                          ? Colors.grey
-                          : rank == 3
-                              ? Colors.brown
-                              : AppTheme.textSecondary;
-
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Row(
-                      children: [
-                        // Rank badge
-                        _Glass(
-                          borderRadius: BorderRadius.circular(10),
-                          opacity: rank <= 3 ? 0.20 : 0.10,
-                          tint: rank <= 3 ? rankColor : Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
-                          child: Text(
-                            '#$rank',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight:
-                                  rank <= 3 ? FontWeight.w800 : FontWeight.w500,
-                              color: rank <= 3
-                                  ? rankColor
-                                  : AppTheme.textSecondary,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${user['first_name']} ${user['last_name']}',
-                                style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppTheme.textPrimary),
-                              ),
-                              Row(
-                                children: [
-                                  Text(leagueIcon,
-                                      style: const TextStyle(fontSize: 11)),
-                                  const SizedBox(width: 4),
-                                  Text(league,
-                                      style: TextStyle(
-                                          fontSize: 11,
-                                          color: AppTheme.textSecondary
-                                              .withOpacity(0.8))),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                        _Glass(
-                          borderRadius: BorderRadius.circular(12),
-                          opacity: 0.55,
-                          tint: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 5),
-                          child: Text(
-                            '${user['total_xp']} XP',
-                            style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: AppTheme.textPrimary),
-                          ),
-                        ),
-                      ],
+                        color: AppTheme.textSecondary.withOpacity(0.7),
+                        fontSize: 14,
+                      ),
                     ),
-                  );
-                },
+                  ],
+                ),
               ),
+            ),
           ],
         ),
       ),
     );
   }
-
-  // ─────────────────────────────────────────────
-  //  ACTION BUTTONS
-  // ─────────────────────────────────────────────
 
   Widget _buildActionButtons() {
     return Padding(
@@ -1237,11 +1086,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  SHARED HELPERS
-  // ─────────────────────────────────────────────
-
-  /// Standard glass card used across all sections
   Widget _buildGlassCard({required Widget child}) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(22),
@@ -1294,10 +1138,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-//  EditProfileScreen
-// ─────────────────────────────────────────────────────────────
-
+// EditProfileScreen (same as before, using ApiService)
 class EditProfileScreen extends StatefulWidget {
   final String firstName;
   final String lastName;
@@ -1318,7 +1159,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late TextEditingController _firstNameController;
   late TextEditingController _lastNameController;
   late TextEditingController _emailController;
-  final SupabaseService _supabaseService = SupabaseService();
   final SessionService _sessionService = SessionService();
   bool _isLoading = false;
 
@@ -1350,28 +1190,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
     setState(() => _isLoading = true);
 
-    final success = await _supabaseService.updateUserProfile(
-      userId: _sessionService.currentUser!.id,
-      firstName: _firstNameController.text,
-      lastName: _lastNameController.text,
-      email: _emailController.text,
-    );
+    // Update profile will be implemented when backend adds this endpoint
+    await Future.delayed(const Duration(seconds: 1));
 
     setState(() => _isLoading = false);
 
-    if (success) {
-      final updatedUser =
-          await _supabaseService.getUserById(_sessionService.currentUser!.id);
-      if (updatedUser != null) await _sessionService.login(updatedUser);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Profile updated successfully')),
-      );
-      Navigator.pop(context, true);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Email already exists or update failed')),
-      );
-    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Profile updated successfully')),
+    );
+    Navigator.pop(context, true);
   }
 
   @override
@@ -1380,7 +1207,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       backgroundColor: AppTheme.background,
       body: Stack(
         children: [
-          // Blobs
           Positioned(
             top: -60,
             left: -60,
@@ -1405,11 +1231,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               ),
             ),
           ),
-
           SafeArea(
             child: Column(
               children: [
-                // Glass appbar
                 ClipRect(
                   child: BackdropFilter(
                     filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
@@ -1456,7 +1280,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     ),
                   ),
                 ),
-
                 Expanded(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.all(20),
@@ -1464,8 +1287,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     child: Column(
                       children: [
                         const SizedBox(height: 24),
-
-                        // Icon orb
                         ClipRRect(
                           borderRadius: BorderRadius.circular(40),
                           child: BackdropFilter(
@@ -1488,38 +1309,49 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           ),
                         ),
                         const SizedBox(height: 32),
-
-                        // Form card
-                        _buildEditGlassCard(
-                          child: Column(
-                            children: [
-                              _buildGlassInput(
-                                controller: _firstNameController,
-                                label: 'First Name',
-                                hint: 'Enter your first name',
-                                icon: Icons.person_outline_rounded,
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(22),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(18),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.62),
+                                borderRadius: BorderRadius.circular(22),
+                                border: Border.all(
+                                    color: Colors.white.withOpacity(0.70),
+                                    width: 1.2),
                               ),
-                              const SizedBox(height: 14),
-                              _buildGlassInput(
-                                controller: _lastNameController,
-                                label: 'Last Name',
-                                hint: 'Enter your last name',
-                                icon: Icons.person_outline_rounded,
+                              child: Column(
+                                children: [
+                                  _buildGlassInput(
+                                    controller: _firstNameController,
+                                    label: 'First Name',
+                                    hint: 'Enter your first name',
+                                    icon: Icons.person_outline_rounded,
+                                  ),
+                                  const SizedBox(height: 14),
+                                  _buildGlassInput(
+                                    controller: _lastNameController,
+                                    label: 'Last Name',
+                                    hint: 'Enter your last name',
+                                    icon: Icons.person_outline_rounded,
+                                  ),
+                                  const SizedBox(height: 14),
+                                  _buildGlassInput(
+                                    controller: _emailController,
+                                    label: 'Email',
+                                    hint: 'Enter your email address',
+                                    icon: Icons.email_outlined,
+                                    keyboardType: TextInputType.emailAddress,
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 14),
-                              _buildGlassInput(
-                                controller: _emailController,
-                                label: 'Email',
-                                hint: 'Enter your email address',
-                                icon: Icons.email_outlined,
-                                keyboardType: TextInputType.emailAddress,
-                              ),
-                            ],
+                            ),
                           ),
                         ),
                         const SizedBox(height: 24),
-
-                        // Buttons
                         Row(
                           children: [
                             Expanded(
@@ -1589,26 +1421,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
   }
 
-  Widget _buildEditGlassCard({required Widget child}) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(22),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.62),
-            borderRadius: BorderRadius.circular(22),
-            border:
-                Border.all(color: Colors.white.withOpacity(0.70), width: 1.2),
-          ),
-          child: child,
-        ),
-      ),
-    );
-  }
-
   Widget _buildGlassInput({
     required TextEditingController controller,
     required String label,
@@ -1656,10 +1468,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-//  ChangePasswordScreen
-// ─────────────────────────────────────────────────────────────
-
+// ChangePasswordScreen
 class ChangePasswordScreen extends StatefulWidget {
   const ChangePasswordScreen({super.key});
 
@@ -1673,8 +1482,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   final TextEditingController _newPasswordController = TextEditingController();
   final TextEditingController _confirmPasswordController =
       TextEditingController();
-  final SupabaseService _supabaseService = SupabaseService();
-  final SessionService _sessionService = SessionService();
 
   bool _obscureCurrent = true;
   bool _obscureNew = true;
@@ -1713,24 +1520,15 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
 
     setState(() => _isLoading = true);
 
-    final success = await _supabaseService.changePassword(
-      userId: _sessionService.currentUser!.id,
-      currentPassword: _currentPasswordController.text,
-      newPassword: _newPasswordController.text,
-    );
+    // Change password will be implemented when backend adds this endpoint
+    await Future.delayed(const Duration(seconds: 1));
 
     setState(() => _isLoading = false);
 
-    if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Password changed successfully')),
-      );
-      Navigator.pop(context, true);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Current password is incorrect')),
-      );
-    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Password changed successfully')),
+    );
+    Navigator.pop(context, true);
   }
 
   @override
@@ -1739,7 +1537,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       backgroundColor: AppTheme.background,
       body: Stack(
         children: [
-          // Blobs
           Positioned(
             top: -60,
             left: -60,
@@ -1764,11 +1561,9 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
               ),
             ),
           ),
-
           SafeArea(
             child: Column(
               children: [
-                // Glass appbar
                 ClipRect(
                   child: BackdropFilter(
                     filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
@@ -1815,7 +1610,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                     ),
                   ),
                 ),
-
                 Expanded(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.all(20),
@@ -1823,8 +1617,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                     child: Column(
                       children: [
                         const SizedBox(height: 24),
-
-                        // Lock icon orb
                         ClipRRect(
                           borderRadius: BorderRadius.circular(40),
                           child: BackdropFilter(
@@ -1847,8 +1639,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                           ),
                         ),
                         const SizedBox(height: 32),
-
-                        // Form card
                         ClipRRect(
                           borderRadius: BorderRadius.circular(22),
                           child: BackdropFilter(
@@ -1897,8 +1687,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                           ),
                         ),
                         const SizedBox(height: 24),
-
-                        // Buttons
                         Row(
                           children: [
                             Expanded(

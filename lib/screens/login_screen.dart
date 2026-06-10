@@ -3,15 +3,12 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'register_screen.dart';
-import '../services/supabase_service.dart';
+import '../services/api_service.dart';
 import '../services/session_service.dart';
 import '../models/user_model.dart';
 import '../theme/app_theme.dart';
 
-// ─────────────────────────────────────────────────────────────
-//  Glass helper (shared with SplashScreen / HomeScreen)
-// ─────────────────────────────────────────────────────────────
-
+// Glass helper
 class _Glass extends StatelessWidget {
   final Widget child;
   final BorderRadius? borderRadius;
@@ -53,10 +50,7 @@ class _Glass extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Rotating ring painter (same as SplashScreen)
-// ─────────────────────────────────────────────────────────────
-
+// Rotating ring painter
 class _RingPainter extends CustomPainter {
   final double progress;
   final Color color;
@@ -97,10 +91,6 @@ class _RingPainter extends CustomPainter {
       old.progress != progress || old.color != color;
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Screen
-// ─────────────────────────────────────────────────────────────
-
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -110,15 +100,14 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen>
     with TickerProviderStateMixin {
-  // ── Form state ──
+  // Form state
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final SupabaseService _supabaseService = SupabaseService();
   final SessionService _sessionService = SessionService();
   bool _obscurePassword = true;
   bool _isLoading = false;
 
-  // ── Entrance animations ──
+  // Entrance animations
   late final AnimationController _blobCtrl;
   late final AnimationController _contentCtrl;
   late final AnimationController _formCtrl;
@@ -190,44 +179,64 @@ class _LoginScreenState extends State<LoginScreen>
     super.dispose();
   }
 
-  // ─────────────────────────────────────────────
-  //  Login handler
-  // ─────────────────────────────────────────────
-
+  // Login handler
   Future<void> _handleLogin() async {
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill all fields')),
-      );
+      _showSnackBar('Please fill all fields', Icons.warning_rounded);
       return;
     }
 
     setState(() => _isLoading = true);
 
-    final user = await _supabaseService.loginUser(
+    final userData = await ApiService.login(
       email: _emailController.text,
       password: _passwordController.text,
     );
 
     setState(() => _isLoading = false);
 
-    if (user != null) {
+    if (userData != null) {
+      final user = UserModel(
+        id: userData['id'],
+        firstName: userData['firstName'],
+        lastName: userData['lastName'],
+        email: userData['email'],
+        passwordHash: '',
+        role: userData['role'],
+        createdAt: DateTime.parse(userData['createdAt']),
+        totalXp: userData['totalXp'],
+        currentLevel: userData['currentLevel'],
+      );
+
       await _sessionService.login(user);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Login successful! +5 XP for daily login')),
-      );
-      Navigator.pop(context);
+      _showSnackBar(userData['message'] ?? 'Login successful!',
+          Icons.check_circle_rounded);
+
+      if (mounted) {
+        Navigator.pop(context, true);
+      }
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Invalid email or password')),
-      );
+      _showSnackBar('Invalid email or password', Icons.error_outline_rounded);
     }
   }
 
-  // ─────────────────────────────────────────────
-  //  BUILD
-  // ─────────────────────────────────────────────
+  void _showSnackBar(String message, IconData icon) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(icon, color: Colors.white, size: 16),
+            const SizedBox(width: 8),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: AppTheme.primary,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -235,10 +244,7 @@ class _LoginScreenState extends State<LoginScreen>
       backgroundColor: AppTheme.background,
       body: Stack(
         children: [
-          // ── Ambient blobs ──
           _buildBlobs(),
-
-          // ── Scrollable content ──
           SafeArea(
             child: SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
@@ -253,30 +259,15 @@ class _LoginScreenState extends State<LoginScreen>
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       const SizedBox(height: 20),
-
-                      // ── Back button ──
                       _buildBackButton(),
-
                       const SizedBox(height: 36),
-
-                      // ── Logo orb ──
                       _buildLogoOrb(),
-
                       const SizedBox(height: 28),
-
-                      // ── Title + tagline pill ──
                       _buildTitle(),
-
                       const SizedBox(height: 16),
-
-                      // ── Feature pills ──
                       _buildFeaturePills(),
-
                       const SizedBox(height: 32),
-
-                      // ── Glass form card ──
                       _buildFormCard(),
-
                       const SizedBox(height: 32),
                     ],
                   ),
@@ -289,16 +280,11 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  AMBIENT BLOBS
-  // ─────────────────────────────────────────────
-
   Widget _buildBlobs() {
     return AnimatedBuilder(
       animation: _blobScale,
       builder: (_, __) => Stack(
         children: [
-          // Top-left — primary indigo
           Positioned(
             top: -80,
             left: -80,
@@ -314,7 +300,6 @@ class _LoginScreenState extends State<LoginScreen>
               ),
             ),
           ),
-          // Top-right — amber
           Positioned(
             top: 60,
             right: -90,
@@ -330,7 +315,6 @@ class _LoginScreenState extends State<LoginScreen>
               ),
             ),
           ),
-          // Bottom-centre — emerald
           Positioned(
             bottom: -100,
             left: 40,
@@ -346,7 +330,6 @@ class _LoginScreenState extends State<LoginScreen>
               ),
             ),
           ),
-          // Bottom-right — violet
           Positioned(
             bottom: 80,
             right: -40,
@@ -367,10 +350,6 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  BACK BUTTON
-  // ─────────────────────────────────────────────
-
   Widget _buildBackButton() {
     return Align(
       alignment: Alignment.centerLeft,
@@ -389,10 +368,6 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  LOGO ORB  (mirrors SplashScreen exactly)
-  // ─────────────────────────────────────────────
-
   Widget _buildLogoOrb() {
     return AnimatedBuilder(
       animation: Listenable.merge([_contentCtrl, _spinCtrl]),
@@ -407,7 +382,6 @@ class _LoginScreenState extends State<LoginScreen>
               child: Stack(
                 alignment: Alignment.center,
                 children: [
-                  // Outer spinning ring 1
                   SizedBox(
                     width: 148,
                     height: 148,
@@ -420,7 +394,6 @@ class _LoginScreenState extends State<LoginScreen>
                       ),
                     ),
                   ),
-                  // Outer spinning ring 2 (counter)
                   SizedBox(
                     width: 132,
                     height: 132,
@@ -433,7 +406,6 @@ class _LoginScreenState extends State<LoginScreen>
                       ),
                     ),
                   ),
-                  // Glass orb
                   ClipRRect(
                     borderRadius: BorderRadius.circular(60),
                     child: BackdropFilter(
@@ -480,10 +452,6 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  TITLE + TAGLINE PILL
-  // ─────────────────────────────────────────────
-
   Widget _buildTitle() {
     return AnimatedBuilder(
       animation: _contentCtrl,
@@ -524,10 +492,6 @@ class _LoginScreenState extends State<LoginScreen>
       ),
     );
   }
-
-  // ─────────────────────────────────────────────
-  //  FEATURE PILLS  (same style as SplashScreen stat pills)
-  // ─────────────────────────────────────────────
 
   Widget _buildFeaturePills() {
     return AnimatedBuilder(
@@ -597,10 +561,6 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  GLASS FORM CARD
-  // ─────────────────────────────────────────────
-
   Widget _buildFormCard() {
     return AnimatedBuilder(
       animation: _formCtrl,
@@ -619,8 +579,7 @@ class _LoginScreenState extends State<LoginScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ── Section label ──
-                Text(
+                const Text(
                   'Sign In',
                   style: TextStyle(
                     fontSize: 18,
@@ -630,8 +589,6 @@ class _LoginScreenState extends State<LoginScreen>
                   ),
                 ),
                 const SizedBox(height: 20),
-
-                // ── Email field ──
                 _buildInputField(
                   controller: _emailController,
                   label: 'Email',
@@ -640,8 +597,6 @@ class _LoginScreenState extends State<LoginScreen>
                   keyboardType: TextInputType.emailAddress,
                 ),
                 const SizedBox(height: 14),
-
-                // ── Password field ──
                 _buildInputField(
                   controller: _passwordController,
                   label: 'Password',
@@ -660,16 +615,12 @@ class _LoginScreenState extends State<LoginScreen>
                         setState(() => _obscurePassword = !_obscurePassword),
                   ),
                 ),
-
-                // ── Forgot password ──
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton(
                     onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                            content: Text('Contact support to reset password')),
-                      );
+                      _showSnackBar('Contact support to reset password',
+                          Icons.help_outline);
                     },
                     style: TextButton.styleFrom(
                       foregroundColor: AppTheme.primary,
@@ -684,8 +635,6 @@ class _LoginScreenState extends State<LoginScreen>
                   ),
                 ),
                 const SizedBox(height: 4),
-
-                // ── Sign In button ──
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -717,8 +666,6 @@ class _LoginScreenState extends State<LoginScreen>
                   ),
                 ),
                 const SizedBox(height: 20),
-
-                // ── OR divider ──
                 Row(
                   children: [
                     Expanded(
@@ -748,8 +695,6 @@ class _LoginScreenState extends State<LoginScreen>
                   ],
                 ),
                 const SizedBox(height: 20),
-
-                // ── Continue as Guest ──
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton(
@@ -771,8 +716,6 @@ class _LoginScreenState extends State<LoginScreen>
                   ),
                 ),
                 const SizedBox(height: 16),
-
-                // ── Register link ──
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -809,10 +752,6 @@ class _LoginScreenState extends State<LoginScreen>
       ),
     );
   }
-
-  // ─────────────────────────────────────────────
-  //  GLASS INPUT FIELD
-  // ─────────────────────────────────────────────
 
   Widget _buildInputField({
     required TextEditingController controller,

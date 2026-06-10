@@ -3,13 +3,10 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'login_screen.dart';
-import '../services/supabase_service.dart';
+import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 
-// ─────────────────────────────────────────────────────────────
-//  Glass helper (shared with SplashScreen / LoginScreen)
-// ─────────────────────────────────────────────────────────────
-
+// Glass helper
 class _Glass extends StatelessWidget {
   final Widget child;
   final BorderRadius? borderRadius;
@@ -51,10 +48,7 @@ class _Glass extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Rotating ring painter (same as SplashScreen / LoginScreen)
-// ─────────────────────────────────────────────────────────────
-
+// Rotating ring painter
 class _RingPainter extends CustomPainter {
   final double progress;
   final Color color;
@@ -95,10 +89,6 @@ class _RingPainter extends CustomPainter {
       old.progress != progress || old.color != color;
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Screen
-// ─────────────────────────────────────────────────────────────
-
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
 
@@ -108,21 +98,20 @@ class RegisterScreen extends StatefulWidget {
 
 class _RegisterScreenState extends State<RegisterScreen>
     with TickerProviderStateMixin {
-  // ── Form state ──
+  // Form state
   final TextEditingController _firstNameController = TextEditingController();
   final TextEditingController _lastNameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController =
       TextEditingController();
-  final SupabaseService _supabaseService = SupabaseService();
 
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _isLoading = false;
   bool _agreeToTerms = false;
 
-  // ── Animation controllers ──
+  // Animation controllers
   late final AnimationController _blobCtrl;
   late final AnimationController _contentCtrl;
   late final AnimationController _formCtrl;
@@ -200,47 +189,59 @@ class _RegisterScreenState extends State<RegisterScreen>
     super.dispose();
   }
 
-  // ─────────────────────────────────────────────
-  //  Register handler
-  // ─────────────────────────────────────────────
+  void _showSnackBar(String message, IconData icon, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(icon, color: Colors.white, size: 16),
+            const SizedBox(width: 8),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: isError ? AppTheme.error : AppTheme.primary,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
 
+  // Register handler
   Future<void> _handleRegister() async {
     if (_firstNameController.text.isEmpty ||
         _lastNameController.text.isEmpty ||
         _emailController.text.isEmpty ||
         _passwordController.text.isEmpty ||
         _confirmPasswordController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill all fields')),
-      );
+      _showSnackBar('Please fill all fields', Icons.warning_rounded,
+          isError: true);
       return;
     }
 
     if (_passwordController.text != _confirmPasswordController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Passwords do not match')),
-      );
+      _showSnackBar('Passwords do not match', Icons.warning_rounded,
+          isError: true);
       return;
     }
 
     if (_passwordController.text.length < 6) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Password must be at least 6 characters')),
-      );
+      _showSnackBar(
+          'Password must be at least 6 characters', Icons.warning_rounded,
+          isError: true);
       return;
     }
 
     if (!_agreeToTerms) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Please agree to the terms and conditions')),
-      );
+      _showSnackBar(
+          'Please agree to the terms and conditions', Icons.warning_rounded,
+          isError: true);
       return;
     }
 
     setState(() => _isLoading = true);
 
-    final success = await _supabaseService.registerUser(
+    final userData = await ApiService.register(
       firstName: _firstNameController.text,
       lastName: _lastNameController.text,
       email: _emailController.text,
@@ -249,27 +250,27 @@ class _RegisterScreenState extends State<RegisterScreen>
 
     setState(() => _isLoading = false);
 
-    if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content:
-                Text('Registration successful! +50 XP bonus! Please login.')),
+    if (userData != null) {
+      _showSnackBar(
+        'Registration successful! +50 XP bonus! Please login.',
+        Icons.check_circle_rounded,
       );
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
-        (route) => false,
-      );
+
+      if (mounted) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+          (route) => false,
+        );
+      }
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('User already exists with this email')),
+      _showSnackBar(
+        'User already exists with this email',
+        Icons.error_outline_rounded,
+        isError: true,
       );
     }
   }
-
-  // ─────────────────────────────────────────────
-  //  BUILD
-  // ─────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -277,10 +278,7 @@ class _RegisterScreenState extends State<RegisterScreen>
       backgroundColor: AppTheme.background,
       body: Stack(
         children: [
-          // ── Ambient blobs ──
           _buildBlobs(),
-
-          // ── Scrollable content ──
           SafeArea(
             child: SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
@@ -290,30 +288,15 @@ class _RegisterScreenState extends State<RegisterScreen>
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     const SizedBox(height: 20),
-
-                    // ── Back button ──
                     _buildBackButton(),
-
                     const SizedBox(height: 36),
-
-                    // ── Logo orb ──
                     _buildLogoOrb(),
-
                     const SizedBox(height: 28),
-
-                    // ── Title + tagline pill ──
                     _buildTitle(),
-
                     const SizedBox(height: 16),
-
-                    // ── XP bonus pill ──
                     _buildBonusPill(),
-
                     const SizedBox(height: 32),
-
-                    // ── Glass form card ──
                     _buildFormCard(),
-
                     const SizedBox(height: 32),
                   ],
                 ),
@@ -325,16 +308,11 @@ class _RegisterScreenState extends State<RegisterScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  AMBIENT BLOBS
-  // ─────────────────────────────────────────────
-
   Widget _buildBlobs() {
     return AnimatedBuilder(
       animation: _blobScale,
       builder: (_, __) => Stack(
         children: [
-          // Top-left — primary indigo
           Positioned(
             top: -80,
             left: -80,
@@ -350,7 +328,6 @@ class _RegisterScreenState extends State<RegisterScreen>
               ),
             ),
           ),
-          // Top-right — amber
           Positioned(
             top: 60,
             right: -90,
@@ -366,7 +343,6 @@ class _RegisterScreenState extends State<RegisterScreen>
               ),
             ),
           ),
-          // Bottom-centre — emerald
           Positioned(
             bottom: -100,
             left: 40,
@@ -382,7 +358,6 @@ class _RegisterScreenState extends State<RegisterScreen>
               ),
             ),
           ),
-          // Bottom-right — violet
           Positioned(
             bottom: 80,
             right: -40,
@@ -403,10 +378,6 @@ class _RegisterScreenState extends State<RegisterScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  BACK BUTTON
-  // ─────────────────────────────────────────────
-
   Widget _buildBackButton() {
     return Align(
       alignment: Alignment.centerLeft,
@@ -425,10 +396,6 @@ class _RegisterScreenState extends State<RegisterScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  LOGO ORB  (mirrors SplashScreen exactly)
-  // ─────────────────────────────────────────────
-
   Widget _buildLogoOrb() {
     return AnimatedBuilder(
       animation: Listenable.merge([_contentCtrl, _spinCtrl]),
@@ -443,7 +410,6 @@ class _RegisterScreenState extends State<RegisterScreen>
               child: Stack(
                 alignment: Alignment.center,
                 children: [
-                  // Outer spinning ring 1
                   SizedBox(
                     width: 148,
                     height: 148,
@@ -456,7 +422,6 @@ class _RegisterScreenState extends State<RegisterScreen>
                       ),
                     ),
                   ),
-                  // Outer spinning ring 2 (counter)
                   SizedBox(
                     width: 132,
                     height: 132,
@@ -469,7 +434,6 @@ class _RegisterScreenState extends State<RegisterScreen>
                       ),
                     ),
                   ),
-                  // Glass orb
                   ClipRRect(
                     borderRadius: BorderRadius.circular(60),
                     child: BackdropFilter(
@@ -516,10 +480,6 @@ class _RegisterScreenState extends State<RegisterScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  TITLE + TAGLINE PILL
-  // ─────────────────────────────────────────────
-
   Widget _buildTitle() {
     return AnimatedBuilder(
       animation: _contentCtrl,
@@ -560,10 +520,6 @@ class _RegisterScreenState extends State<RegisterScreen>
       ),
     );
   }
-
-  // ─────────────────────────────────────────────
-  //  XP BONUS PILL  (animated, styled like stat pills)
-  // ─────────────────────────────────────────────
 
   Widget _buildBonusPill() {
     return AnimatedBuilder(
@@ -619,10 +575,6 @@ class _RegisterScreenState extends State<RegisterScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  GLASS FORM CARD
-  // ─────────────────────────────────────────────
-
   Widget _buildFormCard() {
     return AnimatedBuilder(
       animation: _formCtrl,
@@ -641,7 +593,6 @@ class _RegisterScreenState extends State<RegisterScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ── Section label ──
                 const Text(
                   'Your Details',
                   style: TextStyle(
@@ -652,8 +603,6 @@ class _RegisterScreenState extends State<RegisterScreen>
                   ),
                 ),
                 const SizedBox(height: 20),
-
-                // ── First name & Last name row ──
                 Row(
                   children: [
                     Expanded(
@@ -676,8 +625,6 @@ class _RegisterScreenState extends State<RegisterScreen>
                   ],
                 ),
                 const SizedBox(height: 14),
-
-                // ── Email field ──
                 _buildInputField(
                   controller: _emailController,
                   label: 'Email',
@@ -686,8 +633,6 @@ class _RegisterScreenState extends State<RegisterScreen>
                   keyboardType: TextInputType.emailAddress,
                 ),
                 const SizedBox(height: 14),
-
-                // ── Password field ──
                 _buildInputField(
                   controller: _passwordController,
                   label: 'Password',
@@ -707,8 +652,6 @@ class _RegisterScreenState extends State<RegisterScreen>
                   ),
                 ),
                 const SizedBox(height: 14),
-
-                // ── Confirm password field ──
                 _buildInputField(
                   controller: _confirmPasswordController,
                   label: 'Confirm Password',
@@ -728,18 +671,10 @@ class _RegisterScreenState extends State<RegisterScreen>
                   ),
                 ),
                 const SizedBox(height: 14),
-
-                // ── Password requirements (glass tinted) ──
                 _buildPasswordRequirements(),
-
                 const SizedBox(height: 16),
-
-                // ── Terms checkbox ──
                 _buildTermsRow(),
-
                 const SizedBox(height: 20),
-
-                // ── Create Account button ──
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -771,8 +706,6 @@ class _RegisterScreenState extends State<RegisterScreen>
                   ),
                 ),
                 const SizedBox(height: 20),
-
-                // ── OR divider ──
                 Row(
                   children: [
                     Expanded(
@@ -802,8 +735,6 @@ class _RegisterScreenState extends State<RegisterScreen>
                   ],
                 ),
                 const SizedBox(height: 16),
-
-                // ── Sign In link ──
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -840,10 +771,6 @@ class _RegisterScreenState extends State<RegisterScreen>
       ),
     );
   }
-
-  // ─────────────────────────────────────────────
-  //  GLASS INPUT FIELD
-  // ─────────────────────────────────────────────
 
   Widget _buildInputField({
     required TextEditingController controller,
@@ -894,10 +821,6 @@ class _RegisterScreenState extends State<RegisterScreen>
       ),
     );
   }
-
-  // ─────────────────────────────────────────────
-  //  PASSWORD REQUIREMENTS
-  // ─────────────────────────────────────────────
 
   Widget _buildPasswordRequirements() {
     final hasMinLength = _passwordController.text.length >= 6;
@@ -955,10 +878,6 @@ class _RegisterScreenState extends State<RegisterScreen>
       ],
     );
   }
-
-  // ─────────────────────────────────────────────
-  //  TERMS CHECKBOX ROW
-  // ─────────────────────────────────────────────
 
   Widget _buildTermsRow() {
     return GestureDetector(

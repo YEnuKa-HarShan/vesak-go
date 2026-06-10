@@ -4,12 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:vesak_go/constants.dart';
+import '../constants.dart';
 import '../models/event_model.dart';
 import '../services/memory_service.dart';
 import '../services/cloudinary_service.dart';
 import '../services/session_service.dart';
-import '../services/supabase_service.dart';
+import '../services/api_service.dart';
 import '../widgets/media_picker_grid.dart';
 import '../theme/app_theme.dart';
 
@@ -43,7 +43,6 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
   final MemoryService _memoryService = MemoryService();
   final CloudinaryService _cloudinaryService = CloudinaryService();
   final SessionService _sessionService = SessionService();
-  final SupabaseService _supabaseService = SupabaseService();
 
   final TextEditingController _noteController = TextEditingController();
   final List<File> _selectedImages = [];
@@ -230,16 +229,21 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
       });
     };
 
-    // Upload images
+    final userId = _sessionService.currentUser!.id;
+
+    // Upload images with signed signature
     for (int i = 0; i < _selectedImages.length; i++) {
       setState(() {
         _uploadStatus = 'Uploading image ${i + 1}/${_selectedImages.length}...';
         _imageUploadProgress[i] = 0.2;
       });
 
-      final result = await _cloudinaryService.uploadImage(
-          _selectedImages[i], 'memories/${widget.event.id}',
-          type: 'memory_image');
+      final result = await _cloudinaryService.uploadImageWithSignature(
+        imageFile: _selectedImages[i],
+        userId: userId,
+        type: 'memory',
+        eventId: widget.event.id,
+      );
 
       if (result != null) {
         finalImageUrls.add(_cloudinaryService.extractUrl(result));
@@ -262,7 +266,6 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen> {
     });
 
     bool success;
-    final userId = _sessionService.currentUser!.id;
 
     if (widget.isEditing && widget.existingMemoryId != null) {
       success = await _memoryService.updateMemory(

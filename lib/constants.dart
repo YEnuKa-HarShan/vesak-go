@@ -3,6 +3,20 @@ import 'package:flutter/material.dart';
 
 class AppConstants {
   // ============================================
+  // API CONFIGURATION
+  // ============================================
+  static const String apiBaseUrl = 'http://192.168.43.214:3000/api';
+  static const String apiBaseUrlAuth = 'http://192.168.43.214:3000/api/auth';
+  static const String apiBaseUrlEvents =
+      'http://192.168.43.214:3000/api/events';
+  static const String apiBaseUrlUpload =
+      'http://192.168.43.214:3000/api/upload';
+  static const String apiBaseUrlBookmarks =
+      'http://192.168.43.214:3000/api/bookmarks';
+  static const String apiBaseUrlMemories =
+      'http://192.168.43.214:3000/api/memories';
+
+  // ============================================
   // EVENT CATEGORIES
   // ============================================
   static const List<String> eventCategories = [

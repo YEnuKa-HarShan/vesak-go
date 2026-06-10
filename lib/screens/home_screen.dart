@@ -2,7 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
-import '../services/supabase_service.dart';
+import '../services/api_service.dart';
 import '../services/session_service.dart';
 import '../constants.dart';
 import '../models/event_model.dart';
@@ -66,7 +66,6 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen>
     with SingleTickerProviderStateMixin {
-  final SupabaseService _supabaseService = SupabaseService();
   final SessionService _sessionService = SessionService();
 
   bool _isLoading = true;
@@ -148,9 +147,8 @@ class _HomeScreenState extends State<HomeScreen>
   Future<void> _loadData() async {
     if (!mounted) return;
     try {
-      final eventsCount = await _supabaseService.getEventsCount();
-      final storiesCount = await _supabaseService.getStoriesCount();
-      final allEvents = await _supabaseService.getAllEvents();
+      final eventsCount = await ApiService.getEventsCount();
+      final allEvents = await ApiService.getAllEvents();
 
       final now = DateTime.now();
       final upcoming = allEvents
@@ -168,7 +166,7 @@ class _HomeScreenState extends State<HomeScreen>
       if (mounted) {
         setState(() {
           _eventsCount = eventsCount;
-          _storiesCount = storiesCount;
+          _storiesCount = 0; // Stories feature coming soon
           _upcomingEvents = upcoming;
           _isLoading = false;
         });

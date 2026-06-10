@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:geolocator/geolocator.dart';
-import '../services/supabase_service.dart';
+import '../services/api_service.dart';
 import '../services/location_service.dart';
 import '../services/session_service.dart';
 import '../services/cloudinary_service.dart';
@@ -71,7 +71,6 @@ class CreateEventScreen extends StatefulWidget {
 
 class _CreateEventScreenState extends State<CreateEventScreen>
     with SingleTickerProviderStateMixin {
-  final SupabaseService _supabaseService = SupabaseService();
   final LocationService _locationService = LocationService();
   final SessionService _sessionService = SessionService();
   final CloudinaryService _cloudinaryService = CloudinaryService();
@@ -149,11 +148,17 @@ class _CreateEventScreenState extends State<CreateEventScreen>
 
   Future<void> _getCurrentLocation() async {
     setState(() => _isGettingLocation = true);
-    final location = await _locationService.getCurrentLocation();
-    setState(() {
-      _locationController.text = location;
-      _isGettingLocation = false;
-    });
+    final position = await _locationService.getCurrentPosition();
+    if (position != null) {
+      setState(() {
+        _locationController.text =
+            '${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}';
+      });
+      _showSnack('GPS coordinates captured', Icons.gps_fixed_rounded);
+    } else {
+      _showSnack('Unable to get location', Icons.location_off_rounded);
+    }
+    setState(() => _isGettingLocation = false);
   }
 
   Future<void> _selectDate() async {
@@ -235,8 +240,6 @@ class _CreateEventScreenState extends State<CreateEventScreen>
 
     double latitude = 7.8731;
     double longitude = 80.7718;
-    String? district;
-    String? province;
 
     try {
       LocationPermission permission = await Geolocator.checkPermission();
@@ -251,11 +254,7 @@ class _CreateEventScreenState extends State<CreateEventScreen>
         );
         latitude = position.latitude;
         longitude = position.longitude;
-
-        final locationInfo =
-            await _locationService.getDistrictAndProvince(latitude, longitude);
-        district = locationInfo['district'];
-        province = locationInfo['province'];
+        print('📍 Got coordinates: $latitude, $longitude');
       }
     } catch (e) {
       debugPrint('Could not get coordinates: $e');
@@ -268,40 +267,43 @@ class _CreateEventScreenState extends State<CreateEventScreen>
     String imagePublicId = _existingImagePublicId ?? '';
 
     if (_selectedImage != null) {
-      final eventIdForUpload = _isEditMode
-          ? widget.editEvent!.id
-          : DateTime.now().millisecondsSinceEpoch.toString();
-      final uploadResult = await _cloudinaryService.uploadImage(
-          _selectedImage!, 'events/$eventIdForUpload');
+      _cloudinaryService.onProgress = (progress, status) {
+        print('Upload progress: $progress - $status');
+      };
+
+      final uploadResult = await _cloudinaryService.uploadImageWithSignature(
+        imageFile: _selectedImage!,
+        userId: widget.userId,
+        type: 'event',
+        eventId: _isEditMode ? widget.editEvent!.id : '',
+      );
       if (uploadResult != null) {
         imageUrl = _cloudinaryService.extractUrl(uploadResult);
         imagePublicId = _cloudinaryService.extractPublicId(uploadResult);
       }
     }
 
-    bool success;
+    Map<String, dynamic>? resultData;
 
     if (_isEditMode) {
-      success = await _supabaseService.updateEvent(
+      resultData = await ApiService.updateEvent(
         eventId: widget.editEvent!.id,
-        category: _selectedCategory!,
+        category: _selectedCategory,
         title: _titleController.text,
         description: _descriptionController.text.isEmpty
-            ? ''
+            ? null
             : _descriptionController.text,
         date: dateString,
         time: timeString,
         location: _locationController.text,
         latitude: latitude,
         longitude: longitude,
-        foodType: _selectedCategory == 'දන්සල' ? _selectedFoodType! : 'none',
+        foodType: _selectedCategory == 'දන්සල' ? _selectedFoodType : 'none',
         imageUrl: imageUrl,
         imagePublicId: imagePublicId,
-        district: district,
-        province: province,
       );
     } else {
-      success = await _supabaseService.createEvent(
+      resultData = await ApiService.createEvent(
         category: _selectedCategory!,
         title: _titleController.text,
         description: _descriptionController.text.isEmpty
@@ -317,16 +319,14 @@ class _CreateEventScreenState extends State<CreateEventScreen>
         foodType: _selectedCategory == 'දන්සල' ? _selectedFoodType! : 'none',
         imageUrl: imageUrl,
         imagePublicId: imagePublicId,
-        district: district,
-        province: province,
       );
     }
 
     setState(() => _isLoading = false);
 
-    if (success) {
+    if (resultData != null) {
       if (!_isEditMode) {
-        final updatedUser = await _supabaseService.getUserById(widget.userId);
+        final updatedUser = await ApiService.getUserById(widget.userId);
         if (updatedUser != null) {
           await _sessionService.login(updatedUser);
         }
@@ -848,8 +848,8 @@ class _CreateEventScreenState extends State<CreateEventScreen>
                 TextField(
                   controller: _locationController,
                   decoration: _inputDecoration(
-                    label: 'Location *',
-                    hint: 'Event address or venue',
+                    label: 'Location Name / GPS Coordinates *',
+                    hint: 'Venue name or GPS coordinates',
                     icon: Icons.location_on_rounded,
                     suffixWidget: _isGettingLocation
                         ? const Padding(
@@ -888,7 +888,7 @@ class _CreateEventScreenState extends State<CreateEventScreen>
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Tap 📍 to auto-fill your current location.',
+                  'Tap 📍 to auto-fill your current GPS coordinates. District and Province will be detected automatically by the server.',
                   style: TextStyle(
                       fontSize: 12, color: AppTheme.primary.withOpacity(0.85)),
                 ),

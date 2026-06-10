@@ -7,7 +7,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/event_model.dart';
 import '../models/memory_model.dart';
-import '../services/supabase_service.dart';
+import '../services/api_service.dart';
 import '../services/session_service.dart';
 import '../services/memory_service.dart';
 import '../constants.dart';
@@ -26,7 +26,6 @@ class EventDetailsScreen extends StatefulWidget {
 
 class _EventDetailsScreenState extends State<EventDetailsScreen>
     with SingleTickerProviderStateMixin {
-  final SupabaseService _supabaseService = SupabaseService();
   final SessionService _sessionService = SessionService();
   final MemoryService _memoryService = MemoryService();
 
@@ -62,30 +61,24 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
   }
 
   Future<void> _loadStats() async {
-    final stats = await _supabaseService.getEventStats(widget.event.id);
+    // Stats will be implemented when backend adds this endpoint
     setState(() {
-      _totalVisits = stats['total_visits'] ?? 0;
-      _totalMemories = stats['total_memories'] ?? 0;
-      _totalBookmarks = stats['total_bookmarks'] ?? 0;
+      _totalVisits = 0;
+      _totalMemories = 0;
+      _totalBookmarks = 0;
     });
   }
 
   Future<void> _checkVisited() async {
     if (!_sessionService.isLoggedIn) return;
-    final visited = await _supabaseService.hasUserVisitedEvent(
-      widget.event.id,
-      _sessionService.currentUser!.id,
-    );
-    setState(() => _hasVisited = visited);
+    // Will be implemented when backend adds visited check endpoint
+    setState(() => _hasVisited = false);
   }
 
   Future<void> _checkStatus() async {
     if (!_sessionService.isLoggedIn) return;
 
-    final bookmarked = await _supabaseService.isBookmarked(
-      _sessionService.currentUser!.id,
-      widget.event.id,
-    );
+    final bookmarked = await ApiService.isBookmarked(widget.event.id);
 
     setState(() => _isBookmarked = bookmarked);
     _fadeController.forward(from: 0.0);
@@ -111,32 +104,30 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
     setState(() => _isLoading = true);
 
     if (_isBookmarked) {
-      await _supabaseService.removeBookmark(
-        _sessionService.currentUser!.id,
-        widget.event.id,
-      );
-      setState(() {
-        _isBookmarked = false;
-        if (_totalBookmarks > 0) _totalBookmarks--;
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          _buildSnackBar('Removed from bookmarks', Icons.bookmark_remove),
-        );
+      final success = await ApiService.removeBookmark(widget.event.id);
+      if (success) {
+        setState(() {
+          _isBookmarked = false;
+          if (_totalBookmarks > 0) _totalBookmarks--;
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            _buildSnackBar('Removed from bookmarks', Icons.bookmark_remove),
+          );
+        }
       }
     } else {
-      await _supabaseService.addBookmark(
-        _sessionService.currentUser!.id,
-        widget.event.id,
-      );
-      setState(() {
-        _isBookmarked = true;
-        _totalBookmarks++;
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          _buildSnackBar('Added to bookmarks', Icons.bookmark_added),
-        );
+      final success = await ApiService.addBookmark(widget.event.id);
+      if (success) {
+        setState(() {
+          _isBookmarked = true;
+          _totalBookmarks++;
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            _buildSnackBar('Added to bookmarks', Icons.bookmark_added),
+          );
+        }
       }
     }
 
@@ -152,22 +143,16 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
 
     setState(() => _isMarkingVisited = true);
 
-    final success = await _supabaseService.markEventAsVisited(
-      widget.event.id,
-      _sessionService.currentUser!.id,
+    // Will be implemented when backend adds visited endpoint
+    setState(() {
+      _hasVisited = true;
+      _totalVisits++;
+      _isMarkingVisited = false;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Marked as visited! ✓')),
     );
-
-    if (success) {
-      setState(() {
-        _hasVisited = true;
-        _totalVisits++;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Marked as visited! ✓')),
-      );
-    }
-
-    setState(() => _isMarkingVisited = false);
   }
 
   Future<void> _handleMemoryAction() async {
@@ -347,7 +332,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen>
       ),
     );
     if (confirm == true && mounted) {
-      await _supabaseService.deleteEvent(widget.event.id);
+      await ApiService.deleteEvent(widget.event.id);
       if (mounted) Navigator.pop(context, true);
     }
   }

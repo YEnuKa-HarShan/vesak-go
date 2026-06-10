@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:table_calendar/table_calendar.dart';
-import '../services/supabase_service.dart';
+import '../services/api_service.dart';
 import '../services/session_service.dart';
 import '../models/event_model.dart';
 import '../constants.dart';
@@ -12,10 +12,7 @@ import '../widgets/event_card.dart';
 import 'create_event_screen.dart';
 import 'event_details_screen.dart';
 
-// ─────────────────────────────────────────────────────────────
-//  Glass helper  (mirrors HomeScreen._Glass)
-// ─────────────────────────────────────────────────────────────
-
+// Glass helper
 class _Glass extends StatelessWidget {
   final Widget child;
   final BorderRadius? borderRadius;
@@ -57,10 +54,6 @@ class _Glass extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Screen
-// ─────────────────────────────────────────────────────────────
-
 class EventsScreen extends StatefulWidget {
   final int initialTab;
 
@@ -73,8 +66,6 @@ class EventsScreen extends StatefulWidget {
 class _EventsScreenState extends State<EventsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  final SupabaseService _supabaseService = SupabaseService();
-  final SessionService _sessionService = SessionService();
 
   List<EventModel> _myEvents = [];
   List<EventModel> _allEvents = [];
@@ -93,7 +84,7 @@ class _EventsScreenState extends State<EventsScreen>
   DateTime? _selectedDay;
   Map<DateTime, List<EventModel>> _eventsMap = {};
 
-  // ── Search focus ──
+  // Search focus
   final FocusNode _searchFocus = FocusNode();
   bool _searchFocused = false;
 
@@ -104,9 +95,7 @@ class _EventsScreenState extends State<EventsScreen>
         TabController(length: 3, vsync: this, initialIndex: widget.initialTab);
     _tabController.addListener(_onTabChanged);
     _loadEvents();
-    if (_sessionService.isLoggedIn) {
-      _loadBookmarkedEvents();
-    }
+    _loadBookmarkedEvents();
     _searchFocus.addListener(() {
       setState(() => _searchFocused = _searchFocus.hasFocus);
     });
@@ -132,12 +121,14 @@ class _EventsScreenState extends State<EventsScreen>
 
   Future<void> _loadEvents() async {
     setState(() => _isLoading = true);
-    final allEvents = await _supabaseService.getAllEvents();
+
+    final allEvents = await ApiService.getAllEvents();
+
     setState(() {
       _allEvents = allEvents;
-      if (_sessionService.isLoggedIn) {
+      if (SessionService().isLoggedIn) {
         _myEvents = allEvents
-            .where((e) => e.userId == _sessionService.currentUser?.id)
+            .where((e) => e.userId == SessionService().currentUser?.id)
             .toList();
       } else {
         _myEvents = [];
@@ -149,9 +140,12 @@ class _EventsScreenState extends State<EventsScreen>
   }
 
   Future<void> _loadBookmarkedEvents() async {
-    if (!_sessionService.isLoggedIn) return;
-    final bookmarked = await _supabaseService
-        .getBookmarkedEvents(_sessionService.currentUser!.id);
+    if (!SessionService().isLoggedIn) {
+      setState(() => _bookmarkedEvents = []);
+      return;
+    }
+
+    final bookmarked = await ApiService.getBookmarkedEvents();
     setState(() => _bookmarkedEvents = bookmarked);
   }
 
@@ -287,15 +281,15 @@ class _EventsScreenState extends State<EventsScreen>
       context,
       MaterialPageRoute(
         builder: (_) => CreateEventScreen(
-          userId: _sessionService.currentUser!.id,
-          userFirstName: _sessionService.currentUser!.firstName,
+          userId: SessionService().currentUser!.id,
+          userFirstName: SessionService().currentUser!.firstName,
           editEvent: event,
         ),
       ),
     );
     if (result == true) {
       _loadEvents();
-      if (_tabController.index == 2) _loadBookmarkedEvents();
+      _loadBookmarkedEvents();
     }
   }
 
@@ -323,7 +317,7 @@ class _EventsScreenState extends State<EventsScreen>
       ),
     );
     if (confirm == true) {
-      final ok = await _supabaseService.deleteEvent(eventId);
+      final ok = await ApiService.deleteEvent(eventId);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             content: Text(
@@ -331,7 +325,7 @@ class _EventsScreenState extends State<EventsScreen>
       );
       if (ok) {
         _loadEvents();
-        if (_tabController.index == 2) _loadBookmarkedEvents();
+        _loadBookmarkedEvents();
       }
     }
   }
@@ -353,31 +347,20 @@ class _EventsScreenState extends State<EventsScreen>
       _selectedStatus != null ||
       _searchQuery.isNotEmpty;
 
-  // ─────────────────────────────────────────────
-  // BUILD ROOT
-  // ─────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.background,
       body: Stack(
         children: [
-          // ── Ambient blobs (same as HomeScreen) ──
           _buildAmbientBlobs(),
-
           SafeArea(
             child: Column(
               children: [
-                // ── Glass header ──
                 _buildGlassHeader(),
-
-                // ── Search + filters ──
                 _buildSearchBar(),
                 _buildStatusFilterChips(),
                 _buildCategoryFilterChips(),
-
-                // ── Content ──
                 Expanded(
                   child: TabBarView(
                     controller: _tabController,
@@ -398,10 +381,6 @@ class _EventsScreenState extends State<EventsScreen>
       ),
     );
   }
-
-  // ─────────────────────────────────────────────
-  // AMBIENT BLOBS
-  // ─────────────────────────────────────────────
 
   Widget _buildAmbientBlobs() {
     return Stack(
@@ -446,10 +425,6 @@ class _EventsScreenState extends State<EventsScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  // GLASS HEADER  (mirrors HomeScreen._buildHeader)
-  // ─────────────────────────────────────────────
-
   Widget _buildGlassHeader() {
     return ClipRect(
       child: BackdropFilter(
@@ -467,12 +442,10 @@ class _EventsScreenState extends State<EventsScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // ── Title row ──
               Padding(
                 padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
                 child: Row(
                   children: [
-                    // Back button
                     _Glass(
                       borderRadius: BorderRadius.circular(14),
                       opacity: 0.55,
@@ -491,8 +464,6 @@ class _EventsScreenState extends State<EventsScreen>
                       ),
                     ),
                     const SizedBox(width: 10),
-
-                    // Title
                     const Expanded(
                       child: Text(
                         'Events',
@@ -504,8 +475,6 @@ class _EventsScreenState extends State<EventsScreen>
                         ),
                       ),
                     ),
-
-                    // Calendar toggle (tab 1 only)
                     AnimatedOpacity(
                       opacity: _tabController.index == 1 ? 1.0 : 0.0,
                       duration: const Duration(milliseconds: 200),
@@ -534,8 +503,6 @@ class _EventsScreenState extends State<EventsScreen>
                         ),
                       ),
                     ),
-
-                    // Clear filters
                     if (_hasActiveFilters) ...[
                       const SizedBox(width: 8),
                       GestureDetector(
@@ -563,8 +530,6 @@ class _EventsScreenState extends State<EventsScreen>
                   ],
                 ),
               ),
-
-              // ── Tab bar ──
               TabBar(
                 controller: _tabController,
                 labelColor: AppTheme.primary,
@@ -592,10 +557,6 @@ class _EventsScreenState extends State<EventsScreen>
       ),
     );
   }
-
-  // ─────────────────────────────────────────────
-  // SEARCH BAR
-  // ─────────────────────────────────────────────
 
   Widget _buildSearchBar() {
     return Padding(
@@ -674,10 +635,6 @@ class _EventsScreenState extends State<EventsScreen>
       ),
     );
   }
-
-  // ─────────────────────────────────────────────
-  // FILTER CHIPS (glass style)
-  // ─────────────────────────────────────────────
 
   Widget _buildStatusFilterChips() {
     const statuses = [
@@ -788,10 +745,6 @@ class _EventsScreenState extends State<EventsScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  // CALENDAR VIEW
-  // ─────────────────────────────────────────────
-
   Widget _buildCalendarView() {
     if (_isLoading) return _buildLoader();
 
@@ -891,14 +844,10 @@ class _EventsScreenState extends State<EventsScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  // EVENTS LIST
-  // ─────────────────────────────────────────────
-
   Widget _buildEventsList(List<EventModel> events, {required bool isMyEvents}) {
     if (_isLoading) return _buildLoader();
 
-    if (!_sessionService.isLoggedIn && isMyEvents) {
+    if (!SessionService().isLoggedIn && isMyEvents) {
       return _buildAuthPrompt(
         icon: Icons.lock_outline_rounded,
         message: 'Login to view your events',
@@ -925,8 +874,8 @@ class _EventsScreenState extends State<EventsScreen>
         itemCount: events.length,
         itemBuilder: (context, index) {
           final event = events[index];
-          final isOwner = _sessionService.isLoggedIn &&
-              event.userId == _sessionService.currentUser?.id;
+          final isOwner = SessionService().isLoggedIn &&
+              event.userId == SessionService().currentUser?.id;
           return EventCard(
             event: event,
             showActions: isOwner,
@@ -937,7 +886,7 @@ class _EventsScreenState extends State<EventsScreen>
                 MaterialPageRoute(
                     builder: (_) => EventDetailsScreen(event: event)),
               ).then((_) {
-                if (_tabController.index == 2) _loadBookmarkedEvents();
+                _loadBookmarkedEvents();
               });
             },
             onEdit: () => _editEvent(event),
@@ -949,12 +898,8 @@ class _EventsScreenState extends State<EventsScreen>
     );
   }
 
-  // ─────────────────────────────────────────────
-  // BOOKMARKS LIST
-  // ─────────────────────────────────────────────
-
   Widget _buildBookmarksList() {
-    if (!_sessionService.isLoggedIn) {
+    if (!SessionService().isLoggedIn) {
       return _buildAuthPrompt(
         icon: Icons.bookmark_border_rounded,
         message: 'Login to bookmark events',
@@ -981,8 +926,8 @@ class _EventsScreenState extends State<EventsScreen>
         itemCount: _bookmarkedEvents.length,
         itemBuilder: (context, index) {
           final event = _bookmarkedEvents[index];
-          final isOwner = _sessionService.isLoggedIn &&
-              event.userId == _sessionService.currentUser?.id;
+          final isOwner = SessionService().isLoggedIn &&
+              event.userId == SessionService().currentUser?.id;
           return EventCard(
             event: event,
             showActions: isOwner,
@@ -1002,10 +947,6 @@ class _EventsScreenState extends State<EventsScreen>
       ),
     );
   }
-
-  // ─────────────────────────────────────────────
-  // SHARED EMPTY / LOADING HELPERS
-  // ─────────────────────────────────────────────
 
   Widget _buildLoader() {
     return Center(
@@ -1170,10 +1111,6 @@ class _EventsScreenState extends State<EventsScreen>
       ),
     );
   }
-
-  // ─────────────────────────────────────────────
-  // EMPTY MESSAGE BUILDER
-  // ─────────────────────────────────────────────
 
   String _buildEmptyMessage({required bool isMyEvents}) {
     if (_selectedCategory != null && _selectedStatus != null) {

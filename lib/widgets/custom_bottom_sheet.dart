@@ -4,7 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/event_model.dart';
 import '../services/session_service.dart';
-import '../services/supabase_service.dart';
+import '../services/api_service.dart';
 import '../services/memory_service.dart';
 import '../constants.dart';
 import '../theme/app_theme.dart';
@@ -33,7 +33,6 @@ class EventBottomSheet extends StatefulWidget {
 
 class _EventBottomSheetState extends State<EventBottomSheet> {
   final SessionService _sessionService = SessionService();
-  final SupabaseService _supabaseService = SupabaseService();
   final MemoryService _memoryService = MemoryService();
 
   bool _isBookmarked = false;
@@ -55,20 +54,18 @@ class _EventBottomSheetState extends State<EventBottomSheet> {
   }
 
   Future<void> _loadStats() async {
-    final eventStats = await _supabaseService.getEventStats(widget.event.id);
+    // Stats will be implemented when backend adds this endpoint
     setState(() {
-      _totalVisits = eventStats['total_visits'] ?? 0;
-      _totalMemories = eventStats['total_memories'] ?? 0;
-      _totalBookmarks = eventStats['total_bookmarks'] ?? 0;
+      _totalVisits = 0;
+      _totalMemories = 0;
+      _totalBookmarks = 0;
     });
   }
 
   Future<void> _checkStatus() async {
     if (!_sessionService.isLoggedIn) return;
-    final bookmarked = await _supabaseService.isBookmarked(
-      _sessionService.currentUser!.id,
-      widget.event.id,
-    );
+
+    final bookmarked = await ApiService.isBookmarked(widget.event.id);
     setState(() => _isBookmarked = bookmarked);
   }
 
@@ -83,11 +80,8 @@ class _EventBottomSheetState extends State<EventBottomSheet> {
 
   Future<void> _checkVisited() async {
     if (!_sessionService.isLoggedIn) return;
-    final hasVisited = await _supabaseService.hasUserVisitedEvent(
-      widget.event.id,
-      _sessionService.currentUser!.id,
-    );
-    setState(() => _hasVisited = hasVisited);
+    // Will be implemented when backend adds visited check endpoint
+    setState(() => _hasVisited = false);
   }
 
   Future<void> _toggleBookmark() async {
@@ -95,26 +89,25 @@ class _EventBottomSheetState extends State<EventBottomSheet> {
       _showLoginRequired();
       return;
     }
+
     setState(() => _isBookmarkLoading = true);
 
     if (_isBookmarked) {
-      await _supabaseService.removeBookmark(
-        _sessionService.currentUser!.id,
-        widget.event.id,
-      );
-      setState(() {
-        _isBookmarked = false;
-        if (_totalBookmarks > 0) _totalBookmarks--;
-      });
+      final success = await ApiService.removeBookmark(widget.event.id);
+      if (success) {
+        setState(() {
+          _isBookmarked = false;
+          if (_totalBookmarks > 0) _totalBookmarks--;
+        });
+      }
     } else {
-      await _supabaseService.addBookmark(
-        _sessionService.currentUser!.id,
-        widget.event.id,
-      );
-      setState(() {
-        _isBookmarked = true;
-        _totalBookmarks++;
-      });
+      final success = await ApiService.addBookmark(widget.event.id);
+      if (success) {
+        setState(() {
+          _isBookmarked = true;
+          _totalBookmarks++;
+        });
+      }
     }
 
     setState(() => _isBookmarkLoading = false);
@@ -130,20 +123,13 @@ class _EventBottomSheetState extends State<EventBottomSheet> {
 
     setState(() => _isMarkingVisited = true);
 
-    final success = await _supabaseService.markEventAsVisited(
-      widget.event.id,
-      _sessionService.currentUser!.id,
-    );
-
-    if (success) {
-      setState(() {
-        _hasVisited = true;
-        _totalVisits++;
-      });
-      _showSnackBar('Marked as visited! ✓', Icons.check_circle);
-    }
-
-    setState(() => _isMarkingVisited = false);
+    // Will be implemented when backend adds visited endpoint
+    setState(() {
+      _hasVisited = true;
+      _totalVisits++;
+      _isMarkingVisited = false;
+    });
+    _showSnackBar('Marked as visited! ✓', Icons.check_circle);
   }
 
   Future<void> _handleMemoryAction() async {

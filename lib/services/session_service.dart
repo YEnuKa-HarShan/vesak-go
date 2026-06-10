@@ -30,7 +30,7 @@ class SessionService extends ChangeNotifier {
         final firstName = prefs.getString('user_first_name') ?? '';
         final lastName = prefs.getString('user_last_name') ?? '';
         final email = prefs.getString('user_email') ?? '';
-        final role = prefs.getString('user_role') ?? 'logged';
+        final role = prefs.getString('user_role') ?? 'user';
         final createdAtStr = prefs.getString('user_created_at');
         final totalXp = prefs.getInt('user_total_xp') ?? 0;
         final currentLevel = prefs.getInt('user_current_level') ?? 0;
@@ -102,5 +102,16 @@ class SessionService extends ChangeNotifier {
 
   bool canDeleteEvent(String eventUserId) {
     return isLoggedIn && _currentUser?.id == eventUserId;
+  }
+
+  // Update user data in session (call after XP changes)
+  Future<void> updateUser(UserModel updatedUser) async {
+    _currentUser = updatedUser;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('user_total_xp', updatedUser.totalXp);
+    await prefs.setInt('user_current_level', updatedUser.currentLevel);
+
+    notifyListeners();
   }
 }

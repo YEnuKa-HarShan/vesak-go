@@ -6,7 +6,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import '../constants.dart';
-import '../services/supabase_service.dart';
+import '../services/api_service.dart';
 import '../models/event_model.dart';
 import '../theme/app_theme.dart';
 import '../widgets/custom_bottom_sheet.dart';
@@ -61,8 +61,6 @@ class MapScreen extends StatefulWidget {
 
 class _MapScreenState extends State<MapScreen>
     with SingleTickerProviderStateMixin {
-  final SupabaseService _supabaseService = SupabaseService();
-
   LatLng? _currentLocation;
   double _currentZoom = AppConstants.mapInitialZoom;
   bool _isLoading = true;
@@ -93,7 +91,7 @@ class _MapScreenState extends State<MapScreen>
   }
 
   Future<void> _loadEvents() async {
-    final events = await _supabaseService.getEventsForMap();
+    final events = await ApiService.getAllEvents();
     setState(() {
       _allEvents = events;
       _applyFilters();
