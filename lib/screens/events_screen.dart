@@ -2,7 +2,6 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:table_calendar/table_calendar.dart';
 import '../services/api_service.dart';
 import '../services/session_service.dart';
 import '../models/event_model.dart';
@@ -64,25 +63,46 @@ class EventsScreen extends StatefulWidget {
 }
 
 class _EventsScreenState extends State<EventsScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+    with TickerProviderStateMixin {
+  // ← Changed from SingleTickerProviderStateMixin
+  // Tab state
+  int _selectedTabIndex = 0;
+  final List<int> _previousTabIndexes = [0, 0, 0];
 
+  // Data lists
   List<EventModel> _myEvents = [];
   List<EventModel> _allEvents = [];
+  List<EventModel> _bookmarkedEvents = [];
+  Set<String> _bookmarkedEventIds = {};
+
+  // Filtered lists
   List<EventModel> _filteredMyEvents = [];
   List<EventModel> _filteredAllEvents = [];
-  List<EventModel> _bookmarkedEvents = [];
+  List<EventModel> _filteredBookmarkedEvents = [];
 
+  // UI state
   bool _isLoading = true;
-  String? _selectedCategory;
   String? _selectedStatus;
+  String? _selectedCategory;
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
 
-  bool _isCalendarView = false;
-  DateTime _focusedDay = DateTime.now();
-  DateTime? _selectedDay;
-  Map<DateTime, List<EventModel>> _eventsMap = {};
+  // Filter sidebar
+  bool _isFilterSidebarOpen = false;
+  String? _tempStatus;
+  String? _tempCategory;
+
+  // Animation controllers
+  late AnimationController _fadeController;
+  late AnimationController _sidebarController;
+
+  // Keys for animated list
+  final GlobalKey<AnimatedListState> _myEventsListKey =
+      GlobalKey<AnimatedListState>();
+  final GlobalKey<AnimatedListState> _allEventsListKey =
+      GlobalKey<AnimatedListState>();
+  final GlobalKey<AnimatedListState> _bookmarksListKey =
+      GlobalKey<AnimatedListState>();
 
   // Search focus
   final FocusNode _searchFocus = FocusNode();
@@ -91,32 +111,30 @@ class _EventsScreenState extends State<EventsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController =
-        TabController(length: 3, vsync: this, initialIndex: widget.initialTab);
-    _tabController.addListener(_onTabChanged);
+    _selectedTabIndex = widget.initialTab;
+    _fadeController = AnimationController(
+      vsync: this, // Now works with TickerProviderStateMixin
+      duration: const Duration(milliseconds: 400),
+    );
+    _sidebarController = AnimationController(
+      vsync: this, // Now works with TickerProviderStateMixin
+      duration: const Duration(milliseconds: 300),
+    );
     _loadEvents();
     _loadBookmarkedEvents();
     _searchFocus.addListener(() {
       setState(() => _searchFocused = _searchFocus.hasFocus);
     });
+    _fadeController.forward();
   }
 
   @override
   void dispose() {
-    _tabController.removeListener(_onTabChanged);
-    _tabController.dispose();
+    _fadeController.dispose();
+    _sidebarController.dispose();
     _searchController.dispose();
     _searchFocus.dispose();
     super.dispose();
-  }
-
-  void _onTabChanged() {
-    if (_tabController.index == 2) {
-      _loadBookmarkedEvents();
-    }
-    if (!_tabController.indexIsChanging) {
-      setState(() {});
-    }
   }
 
   Future<void> _loadEvents() async {
@@ -134,68 +152,125 @@ class _EventsScreenState extends State<EventsScreen>
         _myEvents = [];
       }
       _applyFilters();
-      _buildEventsMap();
       _isLoading = false;
     });
   }
 
   Future<void> _loadBookmarkedEvents() async {
     if (!SessionService().isLoggedIn) {
-      setState(() => _bookmarkedEvents = []);
+      setState(() {
+        _bookmarkedEvents = [];
+        _bookmarkedEventIds = {};
+      });
       return;
     }
 
     final bookmarked = await ApiService.getBookmarkedEvents();
-    setState(() => _bookmarkedEvents = bookmarked);
-  }
-
-  void _buildEventsMap() {
-    _eventsMap = {};
-    for (var event in _filteredAllEvents) {
-      try {
-        final date = DateTime.parse(event.date);
-        final key = DateTime(date.year, date.month, date.day);
-        _eventsMap.containsKey(key)
-            ? _eventsMap[key]!.add(event)
-            : _eventsMap[key] = [event];
-      } catch (_) {}
-    }
+    setState(() {
+      _bookmarkedEvents = bookmarked;
+      _bookmarkedEventIds = bookmarked.map((e) => e.id).toSet();
+      _applyFilters();
+    });
   }
 
   void _applyFilters() {
+    // Filter My Events
     List<EventModel> filteredMy = List.from(_myEvents);
-    List<EventModel> filteredAll = List.from(_allEvents);
-
     if (_searchQuery.isNotEmpty) {
       filteredMy = filteredMy
           .where((e) =>
               e.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
               e.location.toLowerCase().contains(_searchQuery.toLowerCase()))
           .toList();
+    }
+    if (_selectedStatus != null) {
+      filteredMy = filteredMy.where(_checkStatusFilter).toList();
+    }
+    if (_selectedCategory != null) {
+      filteredMy =
+          filteredMy.where((e) => e.category == _selectedCategory).toList();
+    }
+
+    // Filter All Events - Exclude own created events AND bookmarked events
+    List<EventModel> filteredAll = List.from(_allEvents);
+    filteredAll = filteredAll.where((e) {
+      // Exclude own created events
+      if (SessionService().isLoggedIn &&
+          e.userId == SessionService().currentUser?.id) {
+        return false;
+      }
+      // Exclude bookmarked events
+      if (_bookmarkedEventIds.contains(e.id)) {
+        return false;
+      }
+      return true;
+    }).toList();
+
+    if (_searchQuery.isNotEmpty) {
       filteredAll = filteredAll
           .where((e) =>
               e.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
               e.location.toLowerCase().contains(_searchQuery.toLowerCase()))
           .toList();
     }
-
     if (_selectedStatus != null) {
-      filteredMy = filteredMy.where(_checkStatusFilter).toList();
       filteredAll = filteredAll.where(_checkStatusFilter).toList();
     }
-
     if (_selectedCategory != null) {
-      filteredMy =
-          filteredMy.where((e) => e.category == _selectedCategory).toList();
       filteredAll =
           filteredAll.where((e) => e.category == _selectedCategory).toList();
     }
 
+    // Filter Bookmarked Events
+    List<EventModel> filteredBookmarked = List.from(_bookmarkedEvents);
+    if (_searchQuery.isNotEmpty) {
+      filteredBookmarked = filteredBookmarked
+          .where((e) =>
+              e.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+              e.location.toLowerCase().contains(_searchQuery.toLowerCase()))
+          .toList();
+    }
+    if (_selectedStatus != null) {
+      filteredBookmarked =
+          filteredBookmarked.where(_checkStatusFilter).toList();
+    }
+    if (_selectedCategory != null) {
+      filteredBookmarked = filteredBookmarked
+          .where((e) => e.category == _selectedCategory)
+          .toList();
+    }
+
+    // Animate list updates
+    _animateListUpdate(_filteredMyEvents, filteredMy, _myEventsListKey);
+    _animateListUpdate(_filteredAllEvents, filteredAll, _allEventsListKey);
+    _animateListUpdate(
+        _filteredBookmarkedEvents, filteredBookmarked, _bookmarksListKey);
+
     setState(() {
       _filteredMyEvents = filteredMy;
       _filteredAllEvents = filteredAll;
+      _filteredBookmarkedEvents = filteredBookmarked;
     });
-    _buildEventsMap();
+  }
+
+  void _animateListUpdate(List<EventModel> oldList, List<EventModel> newList,
+      GlobalKey<AnimatedListState>? listKey) {
+    if (listKey?.currentState == null) return;
+
+    // Remove items that are no longer in the list
+    for (int i = oldList.length - 1; i >= 0; i--) {
+      if (!newList.contains(oldList[i])) {
+        listKey!.currentState!
+            .removeItem(i, (context, animation) => const SizedBox.shrink());
+      }
+    }
+
+    // Add new items
+    for (int i = 0; i < newList.length; i++) {
+      if (i >= oldList.length || oldList[i] != newList[i]) {
+        listKey!.currentState!.insertItem(i);
+      }
+    }
   }
 
   bool _checkStatusFilter(EventModel event) {
@@ -244,37 +319,122 @@ class _EventsScreenState extends State<EventsScreen>
 
   void _applyStatusFilter(String? status) {
     setState(() {
-      _selectedStatus = _selectedStatus == status ? null : status;
+      _selectedStatus = status;
       _applyFilters();
     });
   }
 
   void _applyCategoryFilter(String? category) {
     setState(() {
-      _selectedCategory = _selectedCategory == category ? null : category;
+      _selectedCategory = category;
       _applyFilters();
     });
   }
 
   void _clearAllFilters() {
     setState(() {
-      _selectedCategory = null;
       _selectedStatus = null;
+      _selectedCategory = null;
       _searchQuery = '';
       _searchController.clear();
       _applyFilters();
     });
+    _showSnackBar('All filters cleared', Icons.filter_alt_off);
   }
 
-  void _onDaySelected(DateTime selectedDay, DateTime focusedDay) {
+  bool get _hasActiveFilters {
+    return _selectedStatus != null ||
+        _selectedCategory != null ||
+        _searchQuery.isNotEmpty;
+  }
+
+  void _openFilterSidebar() {
+    _tempStatus = _selectedStatus;
+    _tempCategory = _selectedCategory;
     setState(() {
-      _selectedDay = selectedDay;
-      _focusedDay = focusedDay;
+      _isFilterSidebarOpen = true;
+    });
+    _sidebarController.forward();
+  }
+
+  void _closeFilterSidebar() {
+    _sidebarController.reverse();
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        setState(() {
+          _isFilterSidebarOpen = false;
+        });
+      }
     });
   }
 
-  List<EventModel> _getEventsForDay(DateTime day) =>
-      _eventsMap[DateTime(day.year, day.month, day.day)] ?? [];
+  void _applyFiltersFromSidebar() {
+    _applyStatusFilter(_tempStatus);
+    _applyCategoryFilter(_tempCategory);
+    _closeFilterSidebar();
+  }
+
+  void _showSnackBar(String message, IconData icon) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(icon, color: Colors.white, size: 16),
+            const SizedBox(width: 8),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: AppTheme.primary,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Future<bool> _onWillPop() async {
+    if (_isFilterSidebarOpen) {
+      _closeFilterSidebar();
+      return false;
+    }
+
+    if (_hasActiveFilters) {
+      final shouldClear = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: Colors.white,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text(
+            'Clear Filters?',
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
+          content: const Text(
+            'You have active filters. Do you want to clear them?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel',
+                  style: TextStyle(color: AppTheme.textSecondary)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: TextButton.styleFrom(foregroundColor: AppTheme.primary),
+              child: const Text('Clear Filters'),
+            ),
+          ],
+        ),
+      );
+
+      if (shouldClear == true) {
+        _clearAllFilters();
+      }
+      return false;
+    }
+
+    return true;
+  }
 
   Future<void> _editEvent(EventModel event) async {
     final result = await Navigator.push(
@@ -342,39 +502,361 @@ class _EventsScreenState extends State<EventsScreen>
     );
   }
 
-  bool get _hasActiveFilters =>
-      _selectedCategory != null ||
-      _selectedStatus != null ||
-      _searchQuery.isNotEmpty;
+  Widget _getCurrentTabWidget() {
+    switch (_selectedTabIndex) {
+      case 0:
+        return _buildEventsList(_filteredMyEvents,
+            isMyEvents: true, listKey: _myEventsListKey);
+      case 1:
+        return _buildEventsList(_filteredAllEvents,
+            isMyEvents: false, listKey: _allEventsListKey);
+      case 2:
+        return _buildBookmarksList();
+      default:
+        return const SizedBox.shrink();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.background,
-      body: Stack(
+    return WillPopScope(
+      onWillPop: _onWillPop,
+      child: Scaffold(
+        backgroundColor: AppTheme.background,
+        body: Stack(
+          children: [
+            _buildAmbientBlobs(),
+            SafeArea(
+              child: Column(
+                children: [
+                  _buildHeader(),
+                  _buildSearchBar(),
+                  Expanded(
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 300),
+                      switchInCurve: Curves.easeInOutCubic,
+                      switchOutCurve: Curves.easeInOutCubic,
+                      child: _getCurrentTabWidget(),
+                    ),
+                  ),
+                  _buildBottomNavigationBar(),
+                ],
+              ),
+            ),
+            // Filter Sidebar with smooth animation
+            if (_isFilterSidebarOpen)
+              AnimatedBuilder(
+                animation: _sidebarController,
+                builder: (context, child) {
+                  return Transform.translate(
+                    offset: Offset(
+                      MediaQuery.of(context).size.width *
+                          (1 - _sidebarController.value),
+                      0,
+                    ),
+                    child: Opacity(
+                      opacity: _sidebarController.value,
+                      child: _buildFilterSidebar(),
+                    ),
+                  );
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBottomNavigationBar() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.95),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: BottomNavigationBar(
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: Colors.transparent,
+          selectedItemColor: AppTheme.primary,
+          unselectedItemColor: AppTheme.textSecondary,
+          currentIndex: _selectedTabIndex,
+          elevation: 0,
+          onTap: (index) {
+            setState(() {
+              _previousTabIndexes[_selectedTabIndex] = _selectedTabIndex;
+              _selectedTabIndex = index;
+            });
+          },
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.event_note_rounded),
+              label: 'My Events',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.public_rounded),
+              label: 'All Events',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.bookmark_rounded),
+              label: 'Saved',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterSidebar() {
+    return GestureDetector(
+      onTap: _closeFilterSidebar,
+      child: Container(
+        color: Colors.black.withOpacity(0.4),
+        child: Align(
+          alignment: Alignment.centerRight,
+          child: Material(
+            elevation: 8,
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(24),
+              bottomLeft: Radius.circular(24),
+            ),
+            child: Container(
+              width: MediaQuery.of(context).size.width * 0.8,
+              height: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(24),
+                  bottomLeft: Radius.circular(24),
+                ),
+              ),
+              child: Column(
+                children: [
+                  _buildFilterSidebarHeader(),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildStatusFilterGroup(),
+                          const SizedBox(height: 28),
+                          _buildCategoryFilterGroup(),
+                        ],
+                      ),
+                    ),
+                  ),
+                  _buildFilterSidebarFooter(),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterSidebarHeader() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 16, 16, 16),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+      ),
+      child: Row(
         children: [
-          _buildAmbientBlobs(),
-          SafeArea(
-            child: Column(
+          const Expanded(
+            child: Text(
+              'Filters',
+              style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textPrimary),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, color: AppTheme.textSecondary),
+            onPressed: _closeFilterSidebar,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusFilterGroup() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Icon(Icons.tune_rounded,
+                  size: 16, color: AppTheme.primary),
+            ),
+            const SizedBox(width: 8),
+            const Text(
+              'STATUS',
+              style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                  color: AppTheme.textPrimary),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        RadioListTile<String?>(
+          title: const Text('All Events', style: TextStyle(fontSize: 14)),
+          value: null,
+          groupValue: _tempStatus,
+          onChanged: (value) => setState(() => _tempStatus = value),
+          activeColor: AppTheme.primary,
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+        ),
+        RadioListTile<String?>(
+          title: const Text('Active Now', style: TextStyle(fontSize: 14)),
+          value: 'active',
+          groupValue: _tempStatus,
+          onChanged: (value) => setState(() => _tempStatus = value),
+          activeColor: AppTheme.primary,
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+        ),
+        RadioListTile<String?>(
+          title: const Text('Today', style: TextStyle(fontSize: 14)),
+          value: 'today',
+          groupValue: _tempStatus,
+          onChanged: (value) => setState(() => _tempStatus = value),
+          activeColor: AppTheme.primary,
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+        ),
+        RadioListTile<String?>(
+          title: const Text('Tomorrow', style: TextStyle(fontSize: 14)),
+          value: 'tomorrow',
+          groupValue: _tempStatus,
+          onChanged: (value) => setState(() => _tempStatus = value),
+          activeColor: AppTheme.primary,
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCategoryFilterGroup() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: AppTheme.accent.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Icon(Icons.category_rounded,
+                  size: 16, color: AppTheme.accent),
+            ),
+            const SizedBox(width: 8),
+            const Text(
+              'CATEGORY',
+              style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                  color: AppTheme.textPrimary),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        RadioListTile<String?>(
+          title: const Text('All Categories', style: TextStyle(fontSize: 14)),
+          value: null,
+          groupValue: _tempCategory,
+          onChanged: (value) => setState(() => _tempCategory = value),
+          activeColor: AppTheme.primary,
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+        ),
+        ...AppConstants.eventCategories.map((category) {
+          final icon = AppConstants.getCategoryIcon(category);
+          final catColor = AppConstants.getCategoryColor(category);
+          return RadioListTile<String?>(
+            title: Row(
               children: [
-                _buildGlassHeader(),
-                _buildSearchBar(),
-                _buildStatusFilterChips(),
-                _buildCategoryFilterChips(),
+                Text(icon, style: const TextStyle(fontSize: 16)),
+                const SizedBox(width: 8),
                 Expanded(
-                  child: TabBarView(
-                    controller: _tabController,
-                    children: [
-                      _buildEventsList(_filteredMyEvents, isMyEvents: true),
-                      _isCalendarView
-                          ? _buildCalendarView()
-                          : _buildEventsList(_filteredAllEvents,
-                              isMyEvents: false),
-                      _buildBookmarksList(),
-                    ],
+                  child: Text(
+                    category,
+                    style: const TextStyle(fontSize: 14),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
+            ),
+            value: category,
+            groupValue: _tempCategory,
+            onChanged: (value) => setState(() => _tempCategory = value),
+            activeColor: catColor,
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget _buildFilterSidebarFooter() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: Colors.grey.shade200)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: () {
+                setState(() {
+                  _tempStatus = null;
+                  _tempCategory = null;
+                });
+              },
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.textSecondary,
+                side: BorderSide(color: Colors.grey.shade300),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Reset'),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: ElevatedButton(
+              onPressed: _applyFiltersFromSidebar,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Apply'),
             ),
           ),
         ],
@@ -425,11 +907,14 @@ class _EventsScreenState extends State<EventsScreen>
     );
   }
 
-  Widget _buildGlassHeader() {
+  Widget _buildHeader() {
+    final hasFilters = _hasActiveFilters;
+
     return ClipRect(
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.55),
             border: Border(
@@ -439,116 +924,43 @@ class _EventsScreenState extends State<EventsScreen>
               ),
             ),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+          child: Row(
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
-                child: Row(
-                  children: [
-                    _Glass(
-                      borderRadius: BorderRadius.circular(14),
-                      opacity: 0.55,
-                      tint: Colors.white,
-                      padding: EdgeInsets.zero,
-                      child: SizedBox(
-                        width: 44,
-                        height: 44,
-                        child: IconButton(
-                          icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                              size: 18),
-                          color: AppTheme.primary,
-                          padding: EdgeInsets.zero,
-                          onPressed: () => Navigator.pop(context),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    const Expanded(
-                      child: Text(
-                        'Events',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.textPrimary,
-                          letterSpacing: -0.6,
-                        ),
-                      ),
-                    ),
-                    AnimatedOpacity(
-                      opacity: _tabController.index == 1 ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 200),
-                      child: _Glass(
-                        borderRadius: BorderRadius.circular(14),
-                        opacity: 0.55,
-                        tint: Colors.white,
-                        padding: EdgeInsets.zero,
-                        child: SizedBox(
-                          width: 44,
-                          height: 44,
-                          child: IconButton(
-                            icon: Icon(
-                              _isCalendarView
-                                  ? Icons.view_list_rounded
-                                  : Icons.calendar_month_rounded,
-                              size: 20,
-                            ),
-                            color: AppTheme.primary,
-                            padding: EdgeInsets.zero,
-                            onPressed: _tabController.index == 1
-                                ? () => setState(
-                                    () => _isCalendarView = !_isCalendarView)
-                                : null,
-                          ),
-                        ),
-                      ),
-                    ),
-                    if (_hasActiveFilters) ...[
-                      const SizedBox(width: 8),
-                      GestureDetector(
-                        onTap: _clearAllFilters,
-                        child: _Glass(
-                          borderRadius: BorderRadius.circular(20),
-                          opacity: 0.55,
-                          tint: AppTheme.error,
-                          border: Border.all(
-                              color: AppTheme.error.withOpacity(0.20),
-                              width: 1),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 7),
-                          child: const Text(
-                            'Clear All',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: AppTheme.error,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
+              _buildGlassIconButton(
+                icon: Icons.arrow_back_ios_new_rounded,
+                onPressed: () => _onWillPop(),
+              ),
+              const SizedBox(width: 14),
+              const Expanded(
+                child: Text(
+                  'Events',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.textPrimary,
+                    letterSpacing: -0.6,
+                  ),
                 ),
               ),
-              TabBar(
-                controller: _tabController,
-                labelColor: AppTheme.primary,
-                unselectedLabelColor: AppTheme.textSecondary,
-                indicatorColor: AppTheme.primary,
-                dividerColor: Colors.transparent,
-                overlayColor: WidgetStateProperty.all(Colors.transparent),
-                labelStyle: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                ),
-                unselectedLabelStyle: const TextStyle(
-                  fontWeight: FontWeight.w500,
-                  fontSize: 14,
-                ),
-                tabs: const [
-                  Tab(text: 'My Events'),
-                  Tab(text: 'All Events'),
-                  Tab(text: 'Bookmarks'),
+              Stack(
+                children: [
+                  _buildGlassIconButton(
+                    icon: Icons.filter_list_rounded,
+                    onPressed: _openFilterSidebar,
+                  ),
+                  if (hasFilters)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        width: 10,
+                        height: 10,
+                        decoration: const BoxDecoration(
+                          color: AppTheme.accent,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ],
@@ -558,9 +970,31 @@ class _EventsScreenState extends State<EventsScreen>
     );
   }
 
+  Widget _buildGlassIconButton({
+    required IconData icon,
+    required VoidCallback onPressed,
+  }) {
+    return _Glass(
+      borderRadius: BorderRadius.circular(14),
+      opacity: 0.55,
+      tint: Colors.white,
+      padding: EdgeInsets.zero,
+      child: SizedBox(
+        width: 44,
+        height: 44,
+        child: IconButton(
+          icon: Icon(icon, size: 20),
+          color: AppTheme.primary,
+          onPressed: onPressed,
+          padding: EdgeInsets.zero,
+        ),
+      ),
+    );
+  }
+
   Widget _buildSearchBar() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 220),
         child: ClipRRect(
@@ -636,215 +1070,9 @@ class _EventsScreenState extends State<EventsScreen>
     );
   }
 
-  Widget _buildStatusFilterChips() {
-    const statuses = [
-      {'label': 'All', 'value': null},
-      {'label': 'Active', 'value': 'active'},
-      {'label': 'Today', 'value': 'today'},
-      {'label': 'Tomorrow', 'value': 'tomorrow'},
-    ];
-
-    return SizedBox(
-      height: 44,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-        children: statuses.map((s) {
-          final val = s['value'] as String?;
-          final selected = _selectedStatus == val;
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: _buildGlassChip(
-              label: s['label'] as String,
-              selected: selected,
-              onTap: () => _applyStatusFilter(val),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  Widget _buildCategoryFilterChips() {
-    return SizedBox(
-      height: 44,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: _buildGlassChip(
-              label: 'All',
-              selected: _selectedCategory == null,
-              onTap: () => _applyCategoryFilter(null),
-            ),
-          ),
-          ...AppConstants.eventCategories.map((cat) {
-            final selected = _selectedCategory == cat;
-            return Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: _buildGlassChip(
-                label: '${AppConstants.getCategoryIcon(cat)} $cat',
-                selected: selected,
-                onTap: () => _applyCategoryFilter(cat),
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildGlassChip({
-    required String label,
-    required bool selected,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-            decoration: BoxDecoration(
-              color: selected
-                  ? AppTheme.primary.withOpacity(0.88)
-                  : Colors.white.withOpacity(0.65),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: selected
-                    ? AppTheme.primary.withOpacity(0.40)
-                    : Colors.white.withOpacity(0.70),
-                width: 1.2,
-              ),
-              boxShadow: selected
-                  ? [
-                      BoxShadow(
-                        color: AppTheme.primary.withOpacity(0.20),
-                        blurRadius: 10,
-                        offset: const Offset(0, 3),
-                      )
-                    ]
-                  : [],
-            ),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: selected ? Colors.white : AppTheme.textPrimary,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCalendarView() {
-    if (_isLoading) return _buildLoader();
-
-    return Column(
-      children: [
-        ClipRRect(
-          borderRadius:
-              const BorderRadius.vertical(bottom: Radius.circular(20)),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-            child: Container(
-              margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.65),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                    color: Colors.white.withOpacity(0.70), width: 1.2),
-              ),
-              child: TableCalendar(
-                firstDay: DateTime.now().subtract(const Duration(days: 365)),
-                lastDay: DateTime.now().add(const Duration(days: 365)),
-                focusedDay: _focusedDay,
-                selectedDayPredicate: (day) =>
-                    _selectedDay != null &&
-                    day.year == _selectedDay!.year &&
-                    day.month == _selectedDay!.month &&
-                    day.day == _selectedDay!.day,
-                onDaySelected: _onDaySelected,
-                calendarFormat: CalendarFormat.month,
-                eventLoader: _getEventsForDay,
-                calendarStyle: CalendarStyle(
-                  todayDecoration: BoxDecoration(
-                    color: AppTheme.primary.withOpacity(0.18),
-                    shape: BoxShape.circle,
-                  ),
-                  selectedDecoration: const BoxDecoration(
-                    color: AppTheme.primary,
-                    shape: BoxShape.circle,
-                  ),
-                  weekendTextStyle: const TextStyle(color: AppTheme.error),
-                  markerDecoration: const BoxDecoration(
-                    color: AppTheme.accent,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                headerStyle: HeaderStyle(
-                  titleCentered: true,
-                  formatButtonVisible: false,
-                  titleTextStyle: const TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
-                  leftChevronIcon:
-                      const Icon(Icons.chevron_left, color: AppTheme.primary),
-                  rightChevronIcon:
-                      const Icon(Icons.chevron_right, color: AppTheme.primary),
-                  decoration: const BoxDecoration(
-                    borderRadius:
-                        BorderRadius.vertical(top: Radius.circular(20)),
-                  ),
-                ),
-                daysOfWeekStyle: DaysOfWeekStyle(
-                  weekdayStyle: const TextStyle(color: AppTheme.textSecondary),
-                  weekendStyle: const TextStyle(color: AppTheme.error),
-                ),
-              ),
-            ),
-          ),
-        ),
-        if (_selectedDay != null) ...[
-          const SizedBox(height: 12),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                const Icon(Icons.event_rounded,
-                    size: 16, color: AppTheme.primary),
-                const SizedBox(width: 6),
-                Text(
-                  DateFormat('MMMM d, yyyy').format(_selectedDay!),
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.textPrimary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: _buildEventsList(_getEventsForDay(_selectedDay!),
-                isMyEvents: false),
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildEventsList(List<EventModel> events, {required bool isMyEvents}) {
+  Widget _buildEventsList(List<EventModel> events,
+      {required bool isMyEvents,
+      required GlobalKey<AnimatedListState> listKey}) {
     if (_isLoading) return _buildLoader();
 
     if (!SessionService().isLoggedIn && isMyEvents) {
@@ -867,31 +1095,52 @@ class _EventsScreenState extends State<EventsScreen>
     }
 
     return RefreshIndicator(
-      onRefresh: _loadEvents,
+      onRefresh: () async {
+        await _loadEvents();
+        await _loadBookmarkedEvents();
+      },
       color: AppTheme.accent,
-      child: ListView.builder(
+      child: AnimatedList(
+        key: listKey,
+        initialItemCount: events.length,
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-        itemCount: events.length,
-        itemBuilder: (context, index) {
+        itemBuilder: (context, index, animation) {
           final event = events[index];
           final isOwner = SessionService().isLoggedIn &&
               event.userId == SessionService().currentUser?.id;
-          return EventCard(
-            event: event,
-            showActions: isOwner,
-            height: 200,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (_) => EventDetailsScreen(event: event)),
-              ).then((_) {
-                _loadBookmarkedEvents();
-              });
-            },
-            onEdit: () => _editEvent(event),
-            onDelete: () => _deleteEvent(event.id),
-            onShare: () => _shareEvent(event),
+
+          return SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0.3, 0),
+              end: Offset.zero,
+            ).animate(CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOutCubic,
+            )),
+            child: FadeTransition(
+              opacity: animation,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: EventCard(
+                  event: event,
+                  showActions: isOwner,
+                  height: 200,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => EventDetailsScreen(event: event)),
+                    ).then((_) {
+                      _loadBookmarkedEvents();
+                      _loadEvents();
+                    });
+                  },
+                  onEdit: () => _editEvent(event),
+                  onDelete: () => _deleteEvent(event.id),
+                  onShare: () => _shareEvent(event),
+                ),
+              ),
+            ),
           );
         },
       ),
@@ -910,38 +1159,57 @@ class _EventsScreenState extends State<EventsScreen>
       );
     }
 
-    if (_bookmarkedEvents.isEmpty) {
+    if (_filteredBookmarkedEvents.isEmpty) {
       return _buildEmptyState(
         icon: Icons.bookmark_border_rounded,
-        message: 'No bookmarked events yet',
-        subtitle: 'Tap the bookmark icon on any event to save it here',
+        message: 'No bookmarked events found',
+        subtitle: _hasActiveFilters
+            ? 'Try changing your filters'
+            : 'Tap the bookmark icon on any event to save it here',
       );
     }
 
     return RefreshIndicator(
       onRefresh: _loadBookmarkedEvents,
       color: AppTheme.accent,
-      child: ListView.builder(
+      child: AnimatedList(
+        key: _bookmarksListKey,
+        initialItemCount: _filteredBookmarkedEvents.length,
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-        itemCount: _bookmarkedEvents.length,
-        itemBuilder: (context, index) {
-          final event = _bookmarkedEvents[index];
+        itemBuilder: (context, index, animation) {
+          final event = _filteredBookmarkedEvents[index];
           final isOwner = SessionService().isLoggedIn &&
               event.userId == SessionService().currentUser?.id;
-          return EventCard(
-            event: event,
-            showActions: isOwner,
-            height: 200,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (_) => EventDetailsScreen(event: event)),
-              ).then((_) => _loadBookmarkedEvents());
-            },
-            onEdit: () => _editEvent(event),
-            onDelete: () => _deleteEvent(event.id),
-            onShare: () => _shareEvent(event),
+
+          return SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0.3, 0),
+              end: Offset.zero,
+            ).animate(CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOutCubic,
+            )),
+            child: FadeTransition(
+              opacity: animation,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: EventCard(
+                  event: event,
+                  showActions: isOwner,
+                  height: 200,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => EventDetailsScreen(event: event)),
+                    ).then((_) => _loadBookmarkedEvents());
+                  },
+                  onEdit: () => _editEvent(event),
+                  onDelete: () => _deleteEvent(event.id),
+                  onShare: () => _shareEvent(event),
+                ),
+              ),
+            ),
           );
         },
       ),
